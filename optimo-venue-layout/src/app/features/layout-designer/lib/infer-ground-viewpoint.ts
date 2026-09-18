@@ -33,6 +33,7 @@ const GROUND_SHAPES = new Set([
   'hexagon',
   'octagon',
   'd-end',
+  'curved',
   'curved-rect',
 ]);
 

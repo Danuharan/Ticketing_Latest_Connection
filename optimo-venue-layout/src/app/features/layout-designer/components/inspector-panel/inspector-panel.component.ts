@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import {
   AisleElement,
   BlockGridElement,
+  BlockGridShapeId,
   CenterpieceElement,
   CustomShapeSeatBlock,
   DEFAULT_BLOCK_LENGTH_M,
@@ -212,9 +213,17 @@ const SHAPES: { id: ShapeId; label: string }[] = [
   { id: 'circle', label: 'Circle' },
   { id: 'rectangle', label: 'Rectangle' },
   { id: 'square', label: 'Square' },
+  { id: 'curved', label: 'Curved' },
   { id: 'hexagon', label: 'Hexagon' },
   { id: 'octagon', label: 'Octagon' },
   { id: 'd-end', label: 'D-End' },
+];
+
+const BLOCK_GRID_SHAPES: { id: BlockGridShapeId; label: string }[] = [
+  { id: 'square', label: 'Square' },
+  { id: 'oval', label: 'Oval' },
+  { id: 'circle', label: 'Circle' },
+  { id: 'curved-line', label: 'Curved + Line' },
 ];
 
 /** Dropdown value when the user chooses to enter custom table measurements. */
@@ -248,6 +257,7 @@ export class InspectorPanelComponent {
   private capacityProbeKey = '';
   private feasibilityTimer: ReturnType<typeof setTimeout> | null = null;
   protected readonly shapes = SHAPES;
+  protected readonly blockGridShapes = BLOCK_GRID_SHAPES;
   protected readonly quickSegments = signal(4);
   protected readonly seatsToAdd = signal(1);
   /** Wizard step after clicking "Add seats inside shape". */
@@ -1168,6 +1178,9 @@ export class InspectorPanelComponent {
       customPoints: el?.customPoints,
       polygonSides: el?.polygonSides,
       curveDeg: el?.curveDeg,
+      geometry: el?.geometry,
+      position: el?.position,
+      size: el?.size,
     };
   });
 

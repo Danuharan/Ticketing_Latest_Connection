@@ -1,13 +1,10 @@
 import {
   annularEllipsePath,
-  curvedRectanglePath,
-  dEndPath,
-  localPointsToSvg,
-  polygonPath,
   radialSectorPath,
   rectFromPositionSize,
   PixelRect,
 } from '../../layout-designer/lib/geometry';
+import { resolveCenterpieceShapeDraw, resolveBlockGridShapeDraw } from '../../layout-designer/lib/block-shape-geometry';
 import {
   buildGridSeatMap,
   buildSeatSectionSeatMap,
@@ -107,13 +104,13 @@ function buildElement(el: LayoutElement, config: VenueLayoutConfig, includeSeats
 
   switch (el.type) {
     case 'centerpiece':
-      return buildCenterpiece(base, el, includeSeats);
+      return buildCenterpiece(base, el, config.canvas, includeSeats);
     case 'layer-ring':
       return buildRing(base, el, config.canvas.width, includeSeats);
     case 'layer-rect':
       return buildLayerRect(base, el, includeSeats);
     case 'block-grid':
-      return buildBlockGrid(base, el, includeSeats);
+      return buildBlockGrid(base, el, config.canvas, includeSeats);
     case 'seat-section':
       return buildSeatSection(base, el, includeSeats);
     case 'label':
@@ -123,7 +120,12 @@ function buildElement(el: LayoutElement, config: VenueLayoutConfig, includeSeats
   }
 }
 
-function buildCenterpiece(base: PreviewElement, el: CenterpieceElement, includeSeats: boolean): PreviewElement {
+function buildCenterpiece(
+  base: PreviewElement,
+  el: CenterpieceElement,
+  canvas: { width: number; height: number },
+  includeSeats: boolean,
+): PreviewElement {
   const { rect } = base;
   const labelSize = Math.min(Math.max(Math.min(rect.width, rect.height) * 0.18, 10), 30);
   const labelPos = {
@@ -142,69 +144,30 @@ function buildCenterpiece(base: PreviewElement, el: CenterpieceElement, includeS
     : undefined;
 
   // Named shape (circle/triangle/…) is JSON metadata only — traced outline always wins.
-  const outlinePts = el.customPoints ?? [];
-  if (outlinePts.length >= 3) {
-    const preview: PreviewElement = {
-      ...base,
-      shapeMode: 'polygon',
-      pathD: localPointsToSvg(outlinePts, rect),
-      centerLabel,
-    };
-    if (isCustomShapeSeatingEnabled(el)) {
-      preview.seats = includeSeats ? buildCustomShapeSeatMap(el, rect).seats : [];
-    }
-    return preview;
-  }
+  // Circle/oval/curved may also carry optional `geometry` for self-contained reconstruction.
+  const resolved = resolveCenterpieceShapeDraw(el, canvas);
+  const drawRect = resolved.fromGeometry ? resolved.rect : rect;
+  const drawLabelSize = Math.min(Math.max(Math.min(drawRect.width, drawRect.height) * 0.18, 10), 30);
 
-  switch (el.shape) {
-    case 'rectangle':
-    case 'square': {
-      const curved = curvedRectanglePath(rect, el.curveDeg);
-      if (curved) {
-        return { ...base, shapeMode: 'path', pathD: curved, centerLabel };
-      }
-      return { ...base, shapeMode: 'rect', rectRx: 8, centerLabel };
-    }
-    case 'hexagon':
-    case 'octagon':
-      return {
-        ...base,
-        shapeMode: 'path',
-        pathD: polygonPath(
-          rect.cx,
-          rect.cy,
-          rect.width / 2,
-          rect.height / 2,
-          el.polygonSides ?? (el.shape === 'hexagon' ? 6 : 8),
-        ),
-        centerLabel,
-      };
-    case 'd-end':
-      return {
-        ...base,
-        shapeMode: 'path',
-        pathD: dEndPath(rect.cx, rect.cy, rect.width / 2, rect.height / 2),
-        centerLabel,
-      };
-    case 'triangle': {
-      const tri = [
-        { xPct: 50, yPct: 0 },
-        { xPct: 100, yPct: 100 },
-        { xPct: 0, yPct: 100 },
-      ];
-      return {
-        ...base,
-        shapeMode: 'polygon',
-        pathD: localPointsToSvg(tri, rect),
-        centerLabel,
-      };
-    }
-    case 'custom':
-      return base;
-    default:
-      // oval / circle presets without customPoints
-      return { ...base, shapeMode: 'ellipse', centerLabel };
+  const preview: PreviewElement = {
+    ...base,
+    rect: drawRect,
+    shapeMode: resolved.shapeMode,
+    pathD: resolved.pathD,
+    rectRx: resolved.rectRx,
+    centerLabel: centerLabel
+      ? {
+          ...centerLabel,
+          x: drawRect.cx + ((el.labelOffsetXPct ?? 0) / 100) * drawRect.width,
+          y: drawRect.cy + ((el.labelOffsetYPct ?? 0) / 100) * drawRect.height + drawLabelSize * 0.32,
+          fontSize: drawLabelSize,
+        }
+      : undefined,
+  };
+  if ((el.customPoints?.length ?? 0) >= 3 && isCustomShapeSeatingEnabled(el)) {
+    preview.seats = includeSeats ? buildCustomShapeSeatMap(el, drawRect).seats : [];
   }
+  return preview;
 }
 
 function buildRing(
@@ -331,12 +294,21 @@ function buildLayerRect(
 function buildBlockGrid(
   base: PreviewElement,
   el: Extract<LayoutElement, { type: 'block-grid' }>,
+  canvas: { width: number; height: number },
   includeSeats: boolean,
 ): PreviewElement {
+  const resolved = resolveBlockGridShapeDraw(el, canvas);
   const map = includeSeats
-    ? buildGridSeatMap(base.rect, el.rows, el.seatsPerRow, el.rowLabelStyle)
+    ? buildGridSeatMap(resolved.rect, el.rows, el.seatsPerRow, el.rowLabelStyle)
     : { seats: [] as SeatNode[] };
-  return { ...base, seats: map.seats };
+  return {
+    ...base,
+    rect: resolved.rect,
+    shapeMode: resolved.shapeMode,
+    pathD: resolved.pathD,
+    rectRx: resolved.rectRx,
+    seats: map.seats,
+  };
 }
 
 function buildSeatSection(

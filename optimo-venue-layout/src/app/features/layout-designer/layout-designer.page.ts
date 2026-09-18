@@ -42,6 +42,7 @@ import {
 import { detectBlocksFromFile, fileToDataUrl, dataUrlToFile } from './lib/detect-blocks';
 import { fitLayoutGeometry } from './lib/fit-layout-geometry';
 import { ElementDefinition } from './models/element-definition.model';
+import { BlockGridShapeId } from './models/layout-element.model';
 import { BlueprintAnalyzerService, BlueprintAnalysisError } from './services/blueprint-analyzer.service';
 import { BlueprintAuditService } from './services/blueprint-audit.service';
 import { LayoutCanvasService } from './services/layout-canvas.service';
@@ -185,6 +186,12 @@ export class LayoutDesignerPage implements OnInit, OnDestroy {
 
   protected readonly focusElements = getElementsByCategory('focus');
   protected readonly annotationElements = getElementsByCategory('annotation');
+  protected readonly blockGridParts: readonly { id: BlockGridShapeId; label: string }[] = [
+    { id: 'square', label: 'Square' },
+    { id: 'oval', label: 'Oval' },
+    { id: 'circle', label: 'Circle' },
+    { id: 'curved-line', label: 'Curved + Line' },
+  ];
 
   protected readonly templateId = signal<string | null>(null);
   protected readonly templateName = signal('');
@@ -618,6 +625,11 @@ export class LayoutDesignerPage implements OnInit, OnDestroy {
 
   protected onElementSelect(definition: ElementDefinition): void {
     this.canvas.addTool(definition.id);
+    this.notice.set(null);
+  }
+
+  protected onBlockGridPartSelect(shape: BlockGridShapeId): void {
+    this.canvas.addBlockGrid(shape);
     this.notice.set(null);
   }
 

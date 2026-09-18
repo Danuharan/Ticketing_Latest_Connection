@@ -34,6 +34,7 @@ function renderPreviewContent(vm: PreviewElement): string {
     case 'layer-rect':
       return renderLayerRect(vm);
     case 'block-grid':
+      return renderShapedBlock(vm);
     case 'seat-section':
       return renderRectBlock(vm.rect.x, vm.rect.y, vm.rect.width, vm.rect.height, 8, vm.fill, vm.stroke);
     case 'aisle':
@@ -48,6 +49,10 @@ function renderPreviewContent(vm: PreviewElement): string {
 }
 
 function renderCenterpiece(vm: PreviewElement): string {
+  return renderShapedBlock(vm);
+}
+
+function renderShapedBlock(vm: PreviewElement): string {
   let shape = '';
   switch (vm.shapeMode) {
     case 'ellipse':
@@ -63,6 +68,17 @@ function renderCenterpiece(vm: PreviewElement): string {
         const pointsOrD = vm.shapeMode === 'polygon' ? `points="${escapeAttr(vm.pathD)}"` : `d="${escapeAttr(vm.pathD)}"`;
         shape = `<${tag} ${pointsOrD} fill="${escapeAttr(vm.fill)}" stroke="${escapeAttr(vm.stroke)}" stroke-width="1"/>`;
       }
+      break;
+    default:
+      shape = renderRectBlock(
+        vm.rect.x,
+        vm.rect.y,
+        vm.rect.width,
+        vm.rect.height,
+        vm.rectRx ?? 6,
+        vm.fill,
+        vm.stroke,
+      );
       break;
   }
 

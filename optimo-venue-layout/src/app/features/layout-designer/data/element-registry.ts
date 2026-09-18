@@ -38,7 +38,7 @@ export const ELEMENT_REGISTRY: readonly ElementDefinition[] = [
     id: 'block-grid',
     category: 'focus',
     title: 'Block Grid',
-    description: 'Rectangular block — rows × seats.',
+    description: 'Seat block — Square, Oval, Circle, or Curved + Line outline.',
     icon: '▦',
   },
   {

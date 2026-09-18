@@ -11,7 +11,7 @@ import {
 } from './block-config-template.service';
 import { blockTypeHasCustomizationFlow, blockTypeHasGaFlow, blockTypeUsesSideLabelConfigureUi, BlockTypeId } from '../models/block-type.model';
 import { BlockDiningConfigSnapshot, BlockGaConfigSnapshot, BlockSeatingConfigSnapshot } from '../models/block-config-template.model';
-import { createElement, createCustomPieceFromPoints, createParkingAreaFromPoints } from '../data/element-factory';
+import { createElement, createCustomPieceFromPoints, createParkingAreaFromPoints, createBlockGrid } from '../data/element-factory';
 import { blueprintBlockStyle } from '../lib/cv-to-layout';
 import { findOcrLabelForTracedBlock, type OcrToken } from '../lib/assign-ocr-labels';
 import { canvasPointToReferencePct, referenceImageDrawRect } from '../lib/canvas-image';
@@ -26,6 +26,12 @@ import {
   renormalizeFromCanvasPoints,
 } from '../lib/custom-shape';
 import { classifyBlockShape } from '../lib/classify-block-shape';
+import {
+  hydrateBlockGridFromGeometry,
+  hydrateCenterpieceFromGeometry,
+  syncBlockGridGeometry,
+  syncCenterpieceGeometry,
+} from '../lib/block-shape-geometry';
 import { PixelRect, rectFromPositionSize } from '../lib/geometry';
 import {
   addIndependentCustomShapeSeats,
@@ -257,6 +263,7 @@ export type SeatRowGapScope = 'row' | 'all';
 /** Seat-gap edit scope: one pair, every pair in that row, or every pair in the block. */
 export type SeatPairGapScope = 'pair' | 'row' | 'all';
 import {
+  BlockGridShapeId,
   CanvasConfig,
   CenterpieceElement,
   CustomShapeSeatBlock,
@@ -1312,6 +1319,19 @@ export class LayoutCanvasService {
     return element;
   }
 
+  /** Adds a Block Grid with a specific outline shape (Focus area → Parts). */
+  addBlockGrid(shape: BlockGridShapeId = 'square'): LayoutElement {
+    const element = createBlockGrid(shape, { canvas: this.canvas() });
+    this.pushHistory();
+    this.elements.update((items) => [...items, element]);
+    this.selectedId.set(element.id);
+    this.selectedIds.set([element.id]);
+    this.selectedRingBlock.set(null);
+    this.drawingElementId.set(null);
+    this.draftPoints.set([]);
+    return element;
+  }
+
   /** Custom Piece: crosshair mode — no box until the user finishes drawing. */
   startCustomPieceDrawing(): void {
     this.drawingElementId.set('__draft__');
@@ -1730,7 +1750,24 @@ export class LayoutCanvasService {
   /** Live position update during drag — does not record history. */
   moveSilent(id: string, position: ElementPosition): void {
     this.elements.update((items) =>
-      items.map((el) => (el.id === id ? ({ ...el, position } as LayoutElement) : el)),
+      items.map((el) => {
+        if (el.id !== id) {
+          return el;
+        }
+        // Oval / circle Block Grids store an absolute geometry.center. Keep it
+        // aligned with position so drag matches square / curved-line behavior.
+        if (
+          el.type === 'block-grid' &&
+          (el.geometry?.type === 'circle' || el.geometry?.type === 'ellipse')
+        ) {
+          return {
+            ...el,
+            position,
+            geometry: { ...el.geometry, center: { xPct: position.xPct, yPct: position.yPct } },
+          };
+        }
+        return { ...el, position } as LayoutElement;
+      }),
     );
   }
 
@@ -1759,7 +1796,29 @@ export class LayoutCanvasService {
         return items;
       }
       const next = items.slice();
-      next[index] = { ...el, ...patch } as LayoutElement;
+      let merged = { ...el, ...patch } as LayoutElement;
+      if (merged.type === 'centerpiece') {
+        const touchesGeometry =
+          'shape' in patchRecord ||
+          'size' in patchRecord ||
+          'position' in patchRecord ||
+          'curveDeg' in patchRecord ||
+          'geometry' in patchRecord;
+        if (touchesGeometry) {
+          merged = syncCenterpieceGeometry(merged, this.canvas());
+        }
+      } else if (merged.type === 'block-grid') {
+        const touchesGeometry =
+          'shape' in patchRecord ||
+          'size' in patchRecord ||
+          'position' in patchRecord ||
+          'curveDeg' in patchRecord ||
+          'geometry' in patchRecord;
+        if (touchesGeometry) {
+          merged = syncBlockGridGeometry(merged, this.canvas());
+        }
+      }
+      next[index] = merged;
       return next;
     });
   }
@@ -7705,10 +7764,20 @@ export class LayoutCanvasService {
   /** Builds the JSON document stored in Supabase layout_config. */
   exportLayoutConfig(): VenueLayoutConfig {
     const ref = this.referenceImage();
+    const canvas = this.canvas();
+    const elements = structuredClone(this.elements()).map((el) => {
+      if (el.type === 'centerpiece') {
+        return syncCenterpieceGeometry(el, canvas);
+      }
+      if (el.type === 'block-grid') {
+        return syncBlockGridGeometry(el, canvas);
+      }
+      return el;
+    });
     return {
       version: 1,
-      canvas: { ...this.canvas() },
-      elements: structuredClone(this.elements()),
+      canvas: { ...canvas },
+      elements,
       ...(ref ? { referenceImage: { ...ref } } : {}),
     };
   }
@@ -7716,7 +7785,16 @@ export class LayoutCanvasService {
   /** Replaces the canvas from a saved layout_config payload. */
   loadLayoutConfig(config: VenueLayoutConfig): void {
     this.canvasState.set({ ...config.canvas });
-    this.elements.set(structuredClone(config.elements));
+    const elements = structuredClone(config.elements).map((el) => {
+      if (el.type === 'centerpiece') {
+        return hydrateCenterpieceFromGeometry(el, config.canvas);
+      }
+      if (el.type === 'block-grid') {
+        return hydrateBlockGridFromGeometry(el, config.canvas);
+      }
+      return el;
+    });
+    this.elements.set(elements);
     this.referenceImage.set(config.referenceImage ? { ...config.referenceImage } : null);
     this.syncBlockCounterFromElements();
     this.clearHistoryAndSelection();

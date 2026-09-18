@@ -157,16 +157,40 @@ import { SeatNode } from '../../../layout-designer/lib/seat-layout';
               }
             }
             @case ('block-grid') {
-              <rect
-                [attr.x]="vm.rect.x"
-                [attr.y]="vm.rect.y"
-                [attr.width]="vm.rect.width"
-                [attr.height]="vm.rect.height"
-                rx="6"
-                [attr.fill]="vm.fill"
-                [attr.stroke]="vm.stroke"
-                stroke-width="1"
-              />
+              @switch (vm.shapeMode) {
+                @case ('ellipse') {
+                  <ellipse
+                    [attr.cx]="vm.rect.cx"
+                    [attr.cy]="vm.rect.cy"
+                    [attr.rx]="vm.rect.width / 2"
+                    [attr.ry]="vm.rect.height / 2"
+                    [attr.fill]="vm.fill"
+                    [attr.stroke]="vm.stroke"
+                    stroke-width="1"
+                  />
+                }
+                @case ('path') {
+                  <path
+                    [attr.d]="vm.pathD"
+                    [attr.fill]="vm.fill"
+                    [attr.stroke]="vm.stroke"
+                    stroke-width="1"
+                    stroke-linejoin="round"
+                  />
+                }
+                @default {
+                  <rect
+                    [attr.x]="vm.rect.x"
+                    [attr.y]="vm.rect.y"
+                    [attr.width]="vm.rect.width"
+                    [attr.height]="vm.rect.height"
+                    [attr.rx]="vm.rectRx ?? 6"
+                    [attr.fill]="vm.fill"
+                    [attr.stroke]="vm.stroke"
+                    stroke-width="1"
+                  />
+                }
+              }
               @for (seat of vm.seats ?? []; track $index) {
                 @if (seatChairView(seat); as chair) {
                   <svg:g

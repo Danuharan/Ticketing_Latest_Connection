@@ -15,13 +15,10 @@ import {
   PixelRect,
   annularEllipsePath,
   clamp,
-  curvedRectanglePath,
-  dEndPath,
-  localPointsToSvg,
-  polygonPath,
   radialSectorPath,
   rectFromPositionSize,
 } from '../../lib/geometry';
+import { resolveCenterpieceShapeDraw, resolveBlockGridShapeDraw } from '../../lib/block-shape-geometry';
 import {
   RowLabelNode,
   SeatNode,
@@ -4785,7 +4782,10 @@ export class CanvasStageComponent {
     if (el.type !== 'centerpiece') {
       return vm;
     }
-    const { rect } = vm;
+    const resolvedEarly = resolveCenterpieceShapeDraw(el, this.canvas.canvas(), {
+      buildParkingPath: buildParkingOutlinePathPx,
+    });
+    const rect = resolvedEarly.rect;
     const labelSize = clamp(Math.min(rect.width, rect.height) * 0.18, 10, 30);
     const inWorkspace = this.inBlockWorkspace();
     const customizable = isCustomizableBlock(el);
@@ -4978,127 +4978,36 @@ export class CanvasStageComponent {
     const seatCount = customSeats?.length ?? 0;
     const finish = (result: ElementVM) => this.withSeatingBlockStroke(result, el, seatCount);
 
-    // JSON may label shape as circle/triangle/… but traced blocks always draw as polygons.
-    const outlinePts = el.customPoints ?? [];
-    if (outlinePts.length >= 3) {
-      const isParking = el.blockType === 'parking';
-      const parkingExtras = isParking
-        ? {
-            parkingSlots: this.buildParkingSlotsPx(el, rect),
-            parkingAccessPoints: this.buildParkingAccessPointsPx(el, rect),
-            parkingRoutes: this.buildParkingRoutesPx(el, rect),
-            parkingDividerLines: this.buildParkingDividerLinesPx(el, rect),
-          }
-        : {};
-      return finish({
-        ...vm,
-        shapeMode: isParking ? 'path' : 'polygon',
-        ...(isParking ? { fillOpacity: PARKING_AREA_FILL_OPACITY } : {}),
-        pathD: isParking
-          ? buildParkingOutlinePathPx(rect, outlinePts, el.edgeBowAmounts ?? [])
-          : localPointsToSvg(outlinePts, rect),
-        ...diningRefExtras,
-        centerLabel,
-        ...seatExtras,
-        ...tableExtras,
-        ...stageExtras,
-        ...foodPrepareExtras,
-        ...entranceExtras,
-        ...exitExtras,
-        ...sharedExtras,
-        ...routeExtras,
-        ...parkingExtras,
-      });
-    }
+    const resolved = resolvedEarly;
+    const isParking = el.blockType === 'parking' && (el.customPoints?.length ?? 0) >= 3;
+    const parkingExtras = isParking
+      ? {
+          parkingSlots: this.buildParkingSlotsPx(el, resolved.rect),
+          parkingAccessPoints: this.buildParkingAccessPointsPx(el, resolved.rect),
+          parkingRoutes: this.buildParkingRoutesPx(el, resolved.rect),
+          parkingDividerLines: this.buildParkingDividerLinesPx(el, resolved.rect),
+        }
+      : {};
 
-    switch (el.shape) {
-      case 'rectangle':
-      case 'square': {
-        const curved = curvedRectanglePath(rect, el.curveDeg);
-        if (curved) {
-          return finish({ ...vm, shapeMode: 'path', pathD: curved, centerLabel, ...diningRefExtras, ...seatExtras, ...tableExtras, ...stageExtras, ...foodPrepareExtras, ...entranceExtras, ...exitExtras, ...sharedExtras, ...routeExtras });
-        }
-        return finish({ ...vm, shapeMode: 'rect', rectRx: 8, centerLabel, ...diningRefExtras, ...seatExtras, ...tableExtras, ...stageExtras, ...foodPrepareExtras, ...entranceExtras, ...exitExtras, ...sharedExtras, ...routeExtras });
-      }
-      case 'hexagon':
-      case 'octagon':
-        return finish({
-          ...vm,
-          shapeMode: 'path',
-          pathD: polygonPath(
-            rect.cx,
-            rect.cy,
-            rect.width / 2,
-            rect.height / 2,
-            el.polygonSides ?? (el.shape === 'hexagon' ? 6 : 8),
-          ),
-          centerLabel,
-          ...diningRefExtras,
-          ...seatExtras,
-          ...tableExtras,
-          ...stageExtras,
-          ...foodPrepareExtras,
-          ...entranceExtras,
-          ...exitExtras,
-          ...sharedExtras,
-          ...routeExtras,
-        });
-      case 'd-end':
-        return finish({
-          ...vm,
-          shapeMode: 'path',
-          pathD: dEndPath(rect.cx, rect.cy, rect.width / 2, rect.height / 2),
-          centerLabel,
-          ...diningRefExtras,
-          ...seatExtras,
-          ...tableExtras,
-          ...stageExtras,
-          ...foodPrepareExtras,
-          ...entranceExtras,
-          ...exitExtras,
-          ...sharedExtras,
-          ...routeExtras,
-        });
-      case 'custom': {
-        const pts = el.customPoints ?? [];
-        if (pts.length >= 3) {
-          const isParking = el.blockType === 'parking';
-          const parkingExtras = isParking
-            ? {
-                parkingSlots: this.buildParkingSlotsPx(el, rect),
-                parkingAccessPoints: this.buildParkingAccessPointsPx(el, rect),
-                parkingRoutes: this.buildParkingRoutesPx(el, rect),
-                parkingDividerLines: this.buildParkingDividerLinesPx(el, rect),
-              }
-            : {};
-          return finish({
-            ...vm,
-            shapeMode: isParking ? 'path' : 'polygon',
-            // The parking area is a see-through block: the uploaded plan sits underneath
-            // it as the reference image, and the slots/routes/markers are drawn on top —
-            // an opaque grey body would hide both.
-            ...(isParking ? { fillOpacity: PARKING_AREA_FILL_OPACITY } : {}),
-            pathD: isParking
-              ? buildParkingOutlinePathPx(rect, pts, el.edgeBowAmounts ?? [])
-              : localPointsToSvg(pts, rect),
-            ...diningRefExtras,
-            centerLabel,
-            ...seatExtras,
-            ...tableExtras,
-            ...stageExtras,
-            ...foodPrepareExtras,
-            ...entranceExtras,
-            ...exitExtras,
-            ...sharedExtras,
-            ...routeExtras,
-            ...parkingExtras,
-          });
-        }
-        return finish({ ...vm, shapeMode: undefined, ...diningRefExtras });
-      }
-      default:
-        return finish({ ...vm, shapeMode: 'ellipse', centerLabel, ...diningRefExtras, ...seatExtras, ...tableExtras, ...stageExtras, ...foodPrepareExtras, ...entranceExtras, ...exitExtras, ...sharedExtras, ...routeExtras });
-    }
+    return finish({
+      ...vm,
+      rect: resolved.rect,
+      shapeMode: resolved.shapeMode,
+      pathD: resolved.pathD,
+      rectRx: resolved.rectRx,
+      ...(isParking ? { fillOpacity: PARKING_AREA_FILL_OPACITY } : {}),
+      ...diningRefExtras,
+      centerLabel,
+      ...seatExtras,
+      ...tableExtras,
+      ...stageExtras,
+      ...foodPrepareExtras,
+      ...entranceExtras,
+      ...exitExtras,
+      ...sharedExtras,
+      ...routeExtras,
+      ...parkingExtras,
+    });
   }
 
   /** Blue outline while placing or editing seats inside block workspace. */
@@ -5297,11 +5206,16 @@ export class CanvasStageComponent {
     if (el.type !== 'block-grid') {
       return vm;
     }
+    const resolved = resolveBlockGridShapeDraw(el, this.canvas.canvas());
     const map = this.cachedSeatMap(`${el.id}:grid`, () =>
-      buildGridSeatMap(vm.rect, el.rows, el.seatsPerRow, el.rowLabelStyle),
+      buildGridSeatMap(resolved.rect, el.rows, el.seatsPerRow, el.rowLabelStyle),
     );
     return {
       ...vm,
+      rect: resolved.rect,
+      shapeMode: resolved.shapeMode,
+      pathD: resolved.pathD,
+      rectRx: resolved.rectRx,
       seats: this.applySeatBudget(map.seats),
       rowLabels: this.shouldSkipSeatMap() ? [] : map.rowLabels,
       showRowLabels: true,
