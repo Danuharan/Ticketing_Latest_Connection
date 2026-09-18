@@ -43,9 +43,12 @@ function toShapeId(shape: string): ShapeId {
     'circle',
     'rectangle',
     'square',
+    'curved',
+    'triangle',
     'hexagon',
     'octagon',
     'd-end',
+    'custom',
   ];
   return (allowed as string[]).includes(shape) ? (shape as ShapeId) : 'oval';
 }

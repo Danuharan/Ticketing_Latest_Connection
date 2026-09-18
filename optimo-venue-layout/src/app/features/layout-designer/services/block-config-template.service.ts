@@ -8,7 +8,9 @@ import {
   BlockSeatingConfigSnapshot,
 } from '../models/block-config-template.model';
 import { BlockTypeId } from '../models/block-type.model';
-import { CenterpieceElement } from '../models/layout-element.model';
+import { CenterpieceElement, BlockGridElement, CanvasConfig } from '../models/layout-element.model';
+import { resolveBlockGridShapeDraw } from '../lib/block-shape-geometry';
+import { materializeBlockGridSeatOverrides } from '../lib/seat-layout';
 
 // ---------------------------------------------------------------------------
 // DB row shape (matches block_config_templates table)
@@ -113,6 +115,41 @@ export function extractSeatingSnapshot(el: CenterpieceElement): BlockSeatingConf
     blockViewpointAngleDeg: el.blockViewpointAngleDeg,
     labelOffsetXPct: el.labelOffsetXPct,
     labelOffsetYPct: el.labelOffsetYPct,
+  };
+}
+
+/**
+ * Builds a BlockSeatingConfigSnapshot for a Block Grid using the existing snapshot shape.
+ * Individual seats are stored in `seatPositionOverrides` (element-local %), same as centerpieces.
+ */
+export function extractBlockGridSeatingSnapshot(
+  el: BlockGridElement,
+  canvas: CanvasConfig,
+): BlockSeatingConfigSnapshot {
+  const rows = el.seatLayout?.rows ?? el.rows;
+  const seatsPerRow = el.seatLayout?.seatsPerRow ?? el.seatsPerRow;
+  const rowLabelStyle = el.seatLayout?.rowLabelStyle ?? el.rowLabelStyle;
+  const resolved = resolveBlockGridShapeDraw(el, canvas);
+  const seatPositionOverrides = materializeBlockGridSeatOverrides(
+    resolved.rect,
+    rows,
+    seatsPerRow,
+    rowLabelStyle,
+  );
+  const seatLayout = {
+    ...(el.seatLayout ? structuredClone(el.seatLayout) : {}),
+    rows,
+    seatsPerRow,
+    rowLabelStyle,
+  };
+
+  return {
+    code: el.code,
+    rows,
+    seatsPerRow,
+    rowLabelStyle,
+    seatLayout,
+    seatPositionOverrides,
   };
 }
 

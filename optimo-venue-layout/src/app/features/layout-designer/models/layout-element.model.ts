@@ -353,7 +353,53 @@ export type ShapeId =
   | 'hexagon'
   | 'octagon'
   | 'd-end'
-  | 'custom';
+  | 'custom'
+  /** Bowed / freeform curve outline — prefer `geometry.type === 'path'` (or legacy `curveDeg`). */
+  | 'curved';
+
+/** SVG-like path command in element-local % (0–100 of the element box), same space as `customPoints`. */
+export type BlockPathCommand =
+  | { command: 'M'; xPct: number; yPct: number }
+  | { command: 'L'; xPct: number; yPct: number }
+  | {
+      command: 'C';
+      x1Pct: number;
+      y1Pct: number;
+      x2Pct: number;
+      y2Pct: number;
+      xPct: number;
+      yPct: number;
+    }
+  | { command: 'Q'; x1Pct: number; y1Pct: number; xPct: number; yPct: number }
+  | { command: 'Z' };
+
+/**
+ * Optional explicit geometry for circle / oval / curved blocks.
+ * Canvas-% for circle/ellipse centres and radii (same units as `position` / `size`).
+ * Path commands stay element-local % (like `customPoints`).
+ * Absent on legacy JSON — renderers fall back to `position`/`size`/`curveDeg`/`customPoints`.
+ */
+export type BlockGeometry =
+  | {
+      type: 'circle';
+      center: ElementPosition;
+      /** Radius as % of canvas width (matches wPct sizing). */
+      radiusPct: number;
+    }
+  | {
+      type: 'ellipse';
+      center: ElementPosition;
+      /** Semi-axis as % of canvas width. */
+      radiusXPct: number;
+      /** Semi-axis as % of canvas height. */
+      radiusYPct: number;
+    }
+  | {
+      type: 'path';
+      commands: BlockPathCommand[];
+      /** When true (default), close the path for fill. */
+      closed?: boolean;
+    };
 
 export type ElementKind =
   | 'centerpiece'
@@ -389,6 +435,11 @@ export interface CenterpieceElement extends ElementBase {
   label: string;
   curveDeg: number;
   polygonSides?: number;
+  /**
+   * Optional explicit geometry for circle / oval / curved.
+   * Does not replace `customPoints` for traced seating blocks.
+   */
+  geometry?: BlockGeometry;
   /** Outline points in element-local space (0–100 of the element box). */
   customPoints?: ElementPosition[];
   /** Real-world block dimensions in metres (depth × width). */
@@ -617,7 +668,13 @@ export interface LayerRectElement extends ElementBase {
   blocks: RectBlock[];
 }
 
-/** Block Grid — a single rectangular block of rows × seats. */
+/**
+ * Outline shapes for Block Grid (Focus area → Parts).
+ * Legacy JSON without `shape` renders as today's rectangle (treated as square).
+ */
+export type BlockGridShapeId = 'square' | 'oval' | 'circle' | 'curved-line';
+
+/** Block Grid — a block of rows × seats with an optional shaped outline. */
 export interface BlockGridElement extends ElementBase {
   type: 'block-grid';
   code: string;
@@ -625,6 +682,29 @@ export interface BlockGridElement extends ElementBase {
   rows: number;
   seatsPerRow: number;
   rowLabelStyle: SeatLabelStyle;
+  /**
+   * Outline shape. Omitted on legacy layouts — render as the original rectangle.
+   * Square keeps the existing rectangular outline (rounded rect).
+   */
+  shape?: BlockGridShapeId;
+  /**
+   * Optional explicit geometry for circle / oval / curved-line.
+   * Absent on legacy JSON — renderers fall back to `position` / `size`.
+   */
+  geometry?: BlockGeometry;
+  /** Used when regenerating curved-line path from a bow amount (default path has its own curve). */
+  curveDeg?: number;
+  /**
+   * Stable uuid for venue_block_configurations.block_id (same shell identity as centerpieces).
+   */
+  venueBlockId?: string;
+  /** Master block_config_templates row linked on save (same as centerpiece). */
+  appliedConfigId?: string;
+  appliedConfigName?: string;
+  /** Optional seat-layout snapshot fields restored from Block Configuration. */
+  seatLayout?: SeatLayoutSpec;
+  /** Per-seat positions (% of element box) persisted in Block Configuration seating. */
+  seatPositionOverrides?: Record<string, CustomShapeSeatPosition>;
 }
 
 export interface SeatSectionRow {

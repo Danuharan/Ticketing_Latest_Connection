@@ -694,15 +694,38 @@
             <p class="designer-panel__category">Focus area</p>
             <p class="designer-panel__muted designer-panel__muted--tight">
               Custom Piece for freeform drawing. Center Piece for preset shapes.
+              Block Grid Parts for shaped seat blocks.
             </p>
 
             <div class="element-tool-list">
               @for (item of focusElements; track item.id) {
-                <app-element-tool-card
-                  [definition]="item"
-                  [active]="false"
-                  (select)="onElementSelect($event)"
-                />
+                @if (item.id !== 'block-grid') {
+                  <app-element-tool-card
+                    [definition]="item"
+                    [active]="false"
+                    (select)="onElementSelect($event)"
+                  />
+                } @else {
+                  <div class="element-tool-card element-tool-card--parts">
+                    <div class="element-tool-card__parts-head">
+                      <app-tool-icon [kind]="'block-grid'" />
+                      <span class="element-tool-card__body">
+                        <span class="element-tool-card__title">Block Grid</span>
+                        <span class="element-tool-card__desc">{{ item.description }}</span>
+                      </span>
+                    </div>
+                    <p class="designer-panel__muted designer-panel__muted--tight" style="margin: 0.35rem 0 0.25rem;">Parts</p>
+                    <div class="element-tool-card__parts">
+                      @for (part of blockGridParts; track part.id) {
+                        <button
+                          type="button"
+                          class="element-tool-card__part"
+                          (click)="onBlockGridPartSelect(part.id)"
+                        >{{ part.label }}</button>
+                      }
+                    </div>
+                  </div>
+                }
               }
             </div>
 

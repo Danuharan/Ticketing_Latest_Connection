@@ -8,12 +8,16 @@
 
 import { ElementTypeId } from '../models/element-type.model';
 import {
+  CanvasConfig,
   LayoutElement,
   SectorBlock,
   RectBlock,
   SeatSectionRow,
   RectSide,
   ElementPosition,
+  ShapeId,
+  BlockGridShapeId,
+  BlockGridElement,
   DEFAULT_BLOCK_LENGTH_M,
   DEFAULT_BLOCK_WIDTH_M,
   DEFAULT_CHAIR_LENGTH_M,
@@ -21,6 +25,13 @@ import {
 } from '../models/layout-element.model';
 import { renormalizeFromCanvasPoints } from '../lib/custom-shape';
 import { classifyBlockShape } from '../lib/classify-block-shape';
+import {
+  geometryFromCircleBounds,
+  geometryFromCurvedLine,
+  geometryFromCurvedRect,
+  geometryFromEllipseBounds,
+  syncBlockGridGeometry,
+} from '../lib/block-shape-geometry';
 
 let counter = 0;
 function uid(prefix: string): string {
@@ -124,7 +135,8 @@ export function createElement(toolId: ElementTypeId): LayoutElement | null {
   const center = { xPct: 50, yPct: 50 };
 
   switch (toolId) {
-    case 'center-piece':
+    case 'center-piece': {
+      const size = { wPct: 36, hPct: 26 };
       return {
         id: uid('center'),
         type: 'centerpiece',
@@ -132,11 +144,13 @@ export function createElement(toolId: ElementTypeId): LayoutElement | null {
         shape: 'oval',
         label: 'Ground',
         curveDeg: 0,
+        geometry: geometryFromEllipseBounds(center, size),
         position: center,
-        size: { wPct: 36, hPct: 26 },
+        size,
         rotation: 0,
         style: { fillColor: '#dbeafe', strokeColor: '#93c5fd', labelColor: '#1e3a8a' },
       };
+    }
 
     case 'custom-piece':
       return {
@@ -189,20 +203,7 @@ export function createElement(toolId: ElementTypeId): LayoutElement | null {
       };
 
     case 'block-grid':
-      return {
-        id: uid('grid'),
-        type: 'block-grid',
-        name: 'Block',
-        code: 'B01',
-        label: 'Block',
-        rows: 6,
-        seatsPerRow: 10,
-        rowLabelStyle: 'letter',
-        position: center,
-        size: { wPct: 24, hPct: 22 },
-        rotation: 0,
-        style: { fillColor: '#e0f2fe', strokeColor: '#7dd3fc', labelColor: '#0c4a6e' },
-      };
+      return createBlockGrid('square');
 
     case 'seat-section':
       return {
@@ -274,6 +275,125 @@ export function createElement(toolId: ElementTypeId): LayoutElement | null {
     default:
       return null;
   }
+}
+
+const DEFAULT_GEOMETRY_CANVAS: CanvasConfig = { width: 1000, height: 1000 };
+
+/**
+ * Creates a Block Grid with an outline shape (Focus area → Parts).
+ * Square preserves the historic rectangular defaults; other shapes attach geometry.
+ */
+export function createBlockGrid(
+  shape: BlockGridShapeId = 'square',
+  options?: {
+    position?: ElementPosition;
+    size?: { wPct: number; hPct: number };
+    canvas?: CanvasConfig;
+    code?: string;
+    label?: string;
+    rows?: number;
+    seatsPerRow?: number;
+  },
+): BlockGridElement {
+  const position = options?.position ?? { xPct: 50, yPct: 50 };
+  const canvas = options?.canvas ?? DEFAULT_GEOMETRY_CANVAS;
+  const size =
+    options?.size ??
+    (shape === 'circle'
+      ? { wPct: 20, hPct: 20 }
+      : shape === 'oval'
+        ? { wPct: 28, hPct: 18 }
+        : shape === 'curved-line'
+          ? { wPct: 26, hPct: 18 }
+          : { wPct: 24, hPct: 22 });
+
+  const base: BlockGridElement = {
+    id: uid('grid'),
+    type: 'block-grid',
+    name: 'Block',
+    code: options?.code ?? 'B01',
+    label: options?.label ?? 'Block',
+    rows: options?.rows ?? 6,
+    seatsPerRow: options?.seatsPerRow ?? 10,
+    rowLabelStyle: 'letter',
+    shape,
+    position,
+    size,
+    rotation: 0,
+    style: { fillColor: '#e0f2fe', strokeColor: '#7dd3fc', labelColor: '#0c4a6e' },
+  };
+
+  if (shape === 'circle') {
+    return syncBlockGridGeometry(
+      { ...base, geometry: geometryFromCircleBounds(position, size, canvas) },
+      canvas,
+    );
+  }
+  if (shape === 'oval') {
+    return syncBlockGridGeometry(
+      { ...base, geometry: geometryFromEllipseBounds(position, size) },
+      canvas,
+    );
+  }
+  if (shape === 'curved-line') {
+    return syncBlockGridGeometry(
+      { ...base, curveDeg: 28, geometry: geometryFromCurvedLine(28) },
+      canvas,
+    );
+  }
+  return base;
+}
+
+/**
+ * Creates a non-traced centerpiece for a named primitive shape, with optional
+ * `geometry` for circle / oval / curved so JSON is self-describing on save.
+ */
+export function createShapedCenterpiece(
+  shape: ShapeId,
+  options?: {
+    position?: ElementPosition;
+    size?: { wPct: number; hPct: number };
+    label?: string;
+    curveDeg?: number;
+    canvas?: CanvasConfig;
+  },
+): LayoutElement {
+  const position = options?.position ?? { xPct: 50, yPct: 50 };
+  const size =
+    options?.size ??
+    (shape === 'circle'
+      ? { wPct: 12, hPct: 12 }
+      : shape === 'square'
+        ? { wPct: 10, hPct: 10 }
+        : shape === 'rectangle' || shape === 'curved'
+          ? { wPct: 16, hPct: 8 }
+          : { wPct: 14, hPct: 10 });
+  const canvas = options?.canvas ?? DEFAULT_GEOMETRY_CANVAS;
+  const curveDeg = options?.curveDeg ?? (shape === 'curved' ? 24 : 0);
+
+  const base = {
+    id: uid(shape),
+    type: 'centerpiece' as const,
+    name: options?.label ?? shape.charAt(0).toUpperCase() + shape.slice(1),
+    shape,
+    label: options?.label ?? '',
+    curveDeg,
+    position,
+    size,
+    rotation: 0,
+    style: { fillColor: '#bfdbfe', strokeColor: '#60a5fa', labelColor: '#1e3a8a' },
+  };
+
+  if (shape === 'circle') {
+    return { ...base, geometry: geometryFromCircleBounds(position, size, canvas) };
+  }
+  if (shape === 'oval') {
+    return { ...base, geometry: geometryFromEllipseBounds(position, size) };
+  }
+  if (shape === 'curved') {
+    return { ...base, geometry: geometryFromCurvedRect(curveDeg) };
+  }
+  return base;
 }
 
 /** Builds a finished custom-piece element from canvas-% click points. */

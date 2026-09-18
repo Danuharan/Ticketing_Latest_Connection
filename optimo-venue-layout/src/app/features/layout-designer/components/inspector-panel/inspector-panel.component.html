@@ -2521,7 +2521,7 @@
           }
         </select>
       </label>
-      @if (c.shape === 'rectangle' || c.shape === 'square') {
+      @if (c.shape === 'rectangle' || c.shape === 'square' || c.shape === 'curved') {
         <label class="insp__field">
           <span class="insp__label">Curve ({{ c.curveDeg }}°)</span>
           <input class="insp__range" type="range" min="-60" max="60" step="1" [ngModel]="c.curveDeg" (ngModelChange)="patch({ curveDeg: num($event) })" />
@@ -2751,6 +2751,32 @@
         <span class="insp__label">Label</span>
         <input class="insp__input" type="text" [ngModel]="g.label" (ngModelChange)="patch({ label: $event })" />
       </label>
+      <label class="insp__field">
+        <span class="insp__label">Shape</span>
+        <select
+          class="insp__input"
+          [ngModel]="g.shape ?? 'square'"
+          (ngModelChange)="patch({ shape: $event })"
+        >
+          @for (s of blockGridShapes; track s.id) {
+            <option [value]="s.id">{{ s.label }}</option>
+          }
+        </select>
+      </label>
+      @if ((g.shape ?? 'square') === 'curved-line') {
+        <label class="insp__field">
+          <span class="insp__label">Curve ({{ g.curveDeg ?? 28 }}°)</span>
+          <input
+            class="insp__range"
+            type="range"
+            min="-60"
+            max="60"
+            step="1"
+            [ngModel]="g.curveDeg ?? 28"
+            (ngModelChange)="patch({ curveDeg: num($event) })"
+          />
+        </label>
+      }
       <div class="insp__row">
         <label class="insp__field">
           <span class="insp__label">Rows</span>

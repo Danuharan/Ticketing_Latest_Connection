@@ -1,8 +1,10 @@
 import {
+  type BlockGeometry,
   type DiningLayoutReferenceImage,
   type ElementPosition,
   type ShapeId,
 } from '../models/layout-element.model';
+import { resolveCenterpieceShapeDraw } from './block-shape-geometry';
 import {
   curvedRectanglePath,
   dEndPath,
@@ -16,6 +18,9 @@ export interface DiningBackgroundClipSource {
   customPoints?: ElementPosition[] | null;
   polygonSides?: number;
   curveDeg?: number;
+  geometry?: BlockGeometry;
+  position?: ElementPosition;
+  size?: { wPct: number; hPct: number };
 }
 
 export type DiningBackgroundFitMode = 'cover' | 'contain';
@@ -101,6 +106,8 @@ export function diningBackgroundCssClip(
     case 'circle':
     case 'oval':
       return 'ellipse(50% 50% at 50% 50%)';
+    case 'curved':
+      return 'none';
     default:
       return 'polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)';
   }
@@ -254,7 +261,15 @@ export function diningBackgroundClipSignature(
     return `custom:${pts.map((p) => `${p.xPct.toFixed(2)},${p.yPct.toFixed(2)}`).join('|')}`;
   }
   const shape = clip.shape || 'rectangle';
-  return `${shape}:${clip.polygonSides ?? ''}:${clip.curveDeg ?? ''}`;
+  const geomKey =
+    clip.geometry?.type === 'circle'
+      ? `circle:${clip.geometry.radiusPct.toFixed(2)}`
+      : clip.geometry?.type === 'ellipse'
+        ? `ellipse:${clip.geometry.radiusXPct.toFixed(2)}x${clip.geometry.radiusYPct.toFixed(2)}`
+        : clip.geometry?.type === 'path'
+          ? `path:${clip.geometry.commands.length}`
+          : '';
+  return `${shape}:${clip.polygonSides ?? ''}:${clip.curveDeg ?? ''}:${geomKey}`;
 }
 
 export function diningBackgroundNeedsReadjustment(
@@ -351,6 +366,81 @@ export function diningBackgroundClipGeom(
 > {
   const clip = normalizeClipSource(source);
   const cssClip = diningBackgroundCssClip(clip);
+
+  if (clip.position && clip.size && clip.shape) {
+    const canvas = {
+      width: clip.size.wPct > 0 ? (rect.width / clip.size.wPct) * 100 : Math.max(rect.width, 1),
+      height: clip.size.hPct > 0 ? (rect.height / clip.size.hPct) * 100 : Math.max(rect.height, 1),
+    };
+    const resolved = resolveCenterpieceShapeDraw(
+      {
+        shape: clip.shape as ShapeId,
+        position: clip.position,
+        size: clip.size,
+        curveDeg: clip.curveDeg ?? 0,
+        polygonSides: clip.polygonSides,
+        customPoints: clip.customPoints ?? undefined,
+        geometry: clip.geometry,
+      },
+      canvas,
+    );
+    const drawRect = resolved.fromGeometry ? resolved.rect : rect;
+    const ellipse = {
+      cx: drawRect.cx,
+      cy: drawRect.cy,
+      rx: drawRect.width / 2,
+      ry: drawRect.height / 2,
+    };
+    if (resolved.shapeMode === 'polygon' && resolved.pathD) {
+      return {
+        clipKind: 'polygon',
+        polygonPoints: resolved.pathD,
+        pathD: '',
+        ellipse,
+        rectRx: 0,
+        overlayPath: overlayFromPolygonPoints(outerWidth, outerHeight, resolved.pathD),
+        cssClip,
+      };
+    }
+    if (resolved.shapeMode === 'path' && resolved.pathD) {
+      return {
+        clipKind: 'path',
+        polygonPoints: '',
+        pathD: resolved.pathD,
+        ellipse,
+        rectRx: 0,
+        overlayPath: overlayFromPath(outerWidth, outerHeight, resolved.pathD),
+        cssClip,
+      };
+    }
+    if (resolved.shapeMode === 'ellipse') {
+      return {
+        clipKind: 'ellipse',
+        polygonPoints: '',
+        pathD: '',
+        ellipse,
+        rectRx: 0,
+        overlayPath: overlayFromEllipse(outerWidth, outerHeight, ellipse.cx, ellipse.cy, ellipse.rx, ellipse.ry),
+        cssClip,
+      };
+    }
+    if (resolved.shapeMode === 'rect') {
+      return {
+        clipKind: 'rect',
+        polygonPoints: '',
+        pathD: '',
+        ellipse,
+        rectRx: resolved.rectRx ?? 8,
+        overlayPath: overlayFromPolygonPoints(
+          outerWidth,
+          outerHeight,
+          localPointsToSvg(RECT_CLIP, drawRect),
+        ),
+        cssClip,
+      };
+    }
+  }
+
   const pts = clip.customPoints;
   const ellipse = {
     cx: rect.cx,
@@ -403,7 +493,8 @@ export function diningBackgroundClipGeom(
       };
     }
     case 'rectangle':
-    case 'square': {
+    case 'square':
+    case 'curved': {
       const curved = curvedRectanglePath(rect, clip.curveDeg ?? 0);
       if (curved) {
         return {
