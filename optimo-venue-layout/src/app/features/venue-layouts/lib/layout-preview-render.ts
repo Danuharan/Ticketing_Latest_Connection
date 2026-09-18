@@ -6,6 +6,7 @@ import {
 } from '../../layout-designer/lib/geometry';
 import { resolveCenterpieceShapeDraw, resolveBlockGridShapeDraw } from '../../layout-designer/lib/block-shape-geometry';
 import {
+  buildBlockGridSeatMap,
   buildGridSeatMap,
   buildSeatSectionSeatMap,
   SeatNode,
@@ -299,7 +300,13 @@ function buildBlockGrid(
 ): PreviewElement {
   const resolved = resolveBlockGridShapeDraw(el, canvas);
   const map = includeSeats
-    ? buildGridSeatMap(resolved.rect, el.rows, el.seatsPerRow, el.rowLabelStyle)
+    ? buildBlockGridSeatMap(resolved.rect, {
+        rows: el.rows ?? el.seatLayout?.rows ?? 0,
+        seatsPerRow: el.seatsPerRow ?? el.seatLayout?.seatsPerRow ?? 0,
+        rowLabelStyle: el.rowLabelStyle ?? el.seatLayout?.rowLabelStyle ?? 'letter',
+        seatLayout: el.seatLayout,
+        seatPositionOverrides: el.seatPositionOverrides,
+      })
     : { seats: [] as SeatNode[] };
   return {
     ...base,

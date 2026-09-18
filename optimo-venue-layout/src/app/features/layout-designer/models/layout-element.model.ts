@@ -694,6 +694,17 @@ export interface BlockGridElement extends ElementBase {
   geometry?: BlockGeometry;
   /** Used when regenerating curved-line path from a bow amount (default path has its own curve). */
   curveDeg?: number;
+  /**
+   * Stable uuid for venue_block_configurations.block_id (same shell identity as centerpieces).
+   */
+  venueBlockId?: string;
+  /** Master block_config_templates row linked on save (same as centerpiece). */
+  appliedConfigId?: string;
+  appliedConfigName?: string;
+  /** Optional seat-layout snapshot fields restored from Block Configuration. */
+  seatLayout?: SeatLayoutSpec;
+  /** Per-seat positions (% of element box) persisted in Block Configuration seating. */
+  seatPositionOverrides?: Record<string, CustomShapeSeatPosition>;
 }
 
 export interface SeatSectionRow {

@@ -1,11 +1,16 @@
 import type { VenueLayoutConfig } from '../../../core/models/venue-layout-config.model';
 import type { BlockSeatingConfigSnapshot } from '../../layout-designer/models/block-config-template.model';
 import {
+  extractBlockGridSeatingSnapshot,
   extractSeatingSnapshot,
   seatingSnapshotToPatch,
 } from '../../layout-designer/services/block-config-template.service';
-import type { CenterpieceElement, LayoutElement } from '../../layout-designer/models/layout-element.model';
-import { isCenterpiece } from '../../layout-designer/models/layout-element.model';
+import type {
+  BlockGridElement,
+  CenterpieceElement,
+  LayoutElement,
+} from '../../layout-designer/models/layout-element.model';
+import { isBlockGrid, isCenterpiece } from '../../layout-designer/models/layout-element.model';
 
 /** Seating fields that belong in venue_block_configurations / block_config_templates — not layout_config. */
 const SEATING_FIELD_KEYS: Array<keyof CenterpieceElement> = [
@@ -45,6 +50,16 @@ const SEATING_FIELD_KEYS: Array<keyof CenterpieceElement> = [
   'interactiveSeatingLocked',
 ];
 
+/** Block Grid seating fields stripped from layout_config shell (same tables as centerpieces). */
+const BLOCK_GRID_SEATING_FIELD_KEYS: Array<keyof BlockGridElement> = [
+  'code',
+  'rows',
+  'seatsPerRow',
+  'rowLabelStyle',
+  'seatLayout',
+  'seatPositionOverrides',
+];
+
 export interface BlockSeatingPersistEntry {
   elementId: string;
   venueBlockId: string;
@@ -70,11 +85,18 @@ function hasPersistedSeating(snapshot: BlockSeatingConfigSnapshot): boolean {
 export function ensureVenueBlockIds(layout: VenueLayoutConfig): VenueLayoutConfig {
   const next = structuredClone(layout);
   for (const el of next.elements) {
-    if (!isCenterpiece(el)) {
+    if (isCenterpiece(el)) {
+      if (!el.venueBlockId) {
+        el.venueBlockId = crypto.randomUUID();
+      }
       continue;
     }
-    if (!el.venueBlockId) {
-      el.venueBlockId = crypto.randomUUID();
+    if (isBlockGrid(el) && !el.venueBlockId) {
+      const rows = el.seatLayout?.rows ?? el.rows;
+      const seatsPerRow = el.seatLayout?.seatsPerRow ?? el.seatsPerRow;
+      if ((rows ?? 0) > 0 && (seatsPerRow ?? 0) > 0) {
+        el.venueBlockId = crypto.randomUUID();
+      }
     }
   }
   return next;
@@ -84,24 +106,47 @@ export function ensureVenueBlockIds(layout: VenueLayoutConfig): VenueLayoutConfi
 export function collectBlockSeatingEntries(layout: VenueLayoutConfig): BlockSeatingPersistEntry[] {
   const entries: BlockSeatingPersistEntry[] = [];
   for (const el of layout.elements) {
-    if (!isCenterpiece(el)) {
+    if (isCenterpiece(el)) {
+      if (el.blockType && el.blockType !== 'seating') {
+        continue;
+      }
+      const seating = extractSeatingSnapshot(el);
+      if (!hasPersistedSeating(seating)) {
+        continue;
+      }
+      const venueBlockId = el.venueBlockId ?? crypto.randomUUID();
+      el.venueBlockId = venueBlockId;
+      entries.push({
+        elementId: el.id,
+        venueBlockId,
+        blockType: 'seating',
+        label: (el.label || el.name || el.code || el.id).trim() || el.id,
+        shapeType: el.shape || 'custom',
+        appliedConfigId: el.appliedConfigId,
+        seating,
+      });
       continue;
     }
-    if (el.blockType && el.blockType !== 'seating') {
+
+    if (!isBlockGrid(el)) {
       continue;
     }
-    const seating = extractSeatingSnapshot(el);
+
+    const seating = extractBlockGridSeatingSnapshot(el, layout.canvas);
     if (!hasPersistedSeating(seating)) {
       continue;
     }
     const venueBlockId = el.venueBlockId ?? crypto.randomUUID();
     el.venueBlockId = venueBlockId;
+    // Keep materialized overrides on the in-memory element so strip/merge stay consistent.
+    el.seatLayout = seating.seatLayout;
+    el.seatPositionOverrides = seating.seatPositionOverrides;
     entries.push({
       elementId: el.id,
       venueBlockId,
       blockType: 'seating',
       label: (el.label || el.name || el.code || el.id).trim() || el.id,
-      shapeType: el.shape || 'custom',
+      shapeType: el.shape ?? 'square',
       appliedConfigId: el.appliedConfigId,
       seating,
     });
@@ -117,15 +162,21 @@ export function stripSeatingFromLayout(layout: VenueLayoutConfig): VenueLayoutCo
 }
 
 function stripSeatingFromElement(el: LayoutElement): LayoutElement {
-  if (!isCenterpiece(el)) {
-    return el;
+  if (isCenterpiece(el)) {
+    const copy = { ...el } as CenterpieceElement;
+    for (const key of SEATING_FIELD_KEYS) {
+      delete copy[key];
+    }
+    return copy;
   }
-  const copy = { ...el } as CenterpieceElement;
-  for (const key of SEATING_FIELD_KEYS) {
-    delete copy[key];
+  if (isBlockGrid(el)) {
+    const copy = { ...el } as BlockGridElement;
+    for (const key of BLOCK_GRID_SEATING_FIELD_KEYS) {
+      delete copy[key];
+    }
+    return copy;
   }
-  // Keep identity / type / master link on the shell.
-  return copy;
+  return el;
 }
 
 /** Merges per-block seating configs back onto layout elements (by element_id). */
@@ -141,20 +192,40 @@ export function mergeSeatingIntoLayout(
   const byElement = new Map(configs.map((row) => [row.element_id, row]));
   const next = structuredClone(layout);
   next.elements = next.elements.map((el) => {
-    if (!isCenterpiece(el)) {
-      return el;
-    }
     const row = byElement.get(el.id);
     if (!row?.config?.seating) {
       return el;
     }
-    return {
-      ...el,
-      ...seatingSnapshotToPatch(row.config.seating),
-      venueBlockId: row.block_id,
-      appliedConfigId: row.master_config_template_id ?? el.appliedConfigId,
-      blockType: el.blockType ?? 'seating',
-    };
+
+    if (isCenterpiece(el)) {
+      return {
+        ...el,
+        ...seatingSnapshotToPatch(row.config.seating),
+        venueBlockId: row.block_id,
+        appliedConfigId: row.master_config_template_id ?? el.appliedConfigId,
+        blockType: el.blockType ?? 'seating',
+      };
+    }
+
+    if (isBlockGrid(el)) {
+      const seating = row.config.seating;
+      return {
+        ...el,
+        code: seating.code ?? el.code ?? 'B01',
+        rows: seating.rows ?? el.rows ?? seating.seatLayout?.rows ?? 0,
+        seatsPerRow: seating.seatsPerRow ?? el.seatsPerRow ?? seating.seatLayout?.seatsPerRow ?? 0,
+        rowLabelStyle:
+          seating.rowLabelStyle ?? el.rowLabelStyle ?? seating.seatLayout?.rowLabelStyle ?? 'letter',
+        seatLayout: seating.seatLayout ? structuredClone(seating.seatLayout) : el.seatLayout,
+        seatPositionOverrides: seating.seatPositionOverrides
+          ? structuredClone(seating.seatPositionOverrides)
+          : el.seatPositionOverrides,
+        venueBlockId: row.block_id,
+        appliedConfigId: row.master_config_template_id ?? el.appliedConfigId,
+      };
+    }
+
+    return el;
   });
   return next;
 }

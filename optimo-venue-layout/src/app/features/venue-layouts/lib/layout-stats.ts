@@ -56,8 +56,14 @@ function countSeatsOnElement(
     return 0;
   }
   switch (el.type) {
-    case 'block-grid':
-      return Math.max(0, el.rows) * Math.max(0, el.seatsPerRow);
+    case 'block-grid': {
+      if (el.seatPositionOverrides && Object.keys(el.seatPositionOverrides).length > 0) {
+        return Object.keys(el.seatPositionOverrides).length;
+      }
+      const rows = el.rows ?? el.seatLayout?.rows ?? 0;
+      const seatsPerRow = el.seatsPerRow ?? el.seatLayout?.seatsPerRow ?? 0;
+      return Math.max(0, rows) * Math.max(0, seatsPerRow);
+    }
     case 'seat-section':
       return el.rows.reduce((sum, row) => sum + Math.max(0, row.seatCount), 0);
     case 'layer-ring':

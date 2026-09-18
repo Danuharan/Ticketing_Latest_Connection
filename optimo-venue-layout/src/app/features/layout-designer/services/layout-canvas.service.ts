@@ -1817,6 +1817,20 @@ export class LayoutCanvasService {
         if (touchesGeometry) {
           merged = syncBlockGridGeometry(merged, this.canvas());
         }
+        // Rows / seats-per-row edits invalidate materialized overrides; save will rematerialize.
+        if ('rows' in patchRecord || 'seatsPerRow' in patchRecord || 'rowLabelStyle' in patchRecord) {
+          const grid = merged;
+          const { seatPositionOverrides: _dropped, ...rest } = grid;
+          merged = {
+            ...rest,
+            type: 'block-grid',
+            seatLayout: {
+              rows: grid.rows,
+              seatsPerRow: grid.seatsPerRow,
+              rowLabelStyle: grid.rowLabelStyle,
+            },
+          };
+        }
       }
       next[index] = merged;
       return next;
@@ -8853,8 +8867,14 @@ function countSeats(el: LayoutElement): number {
     return 0;
   }
   switch (el.type) {
-    case 'block-grid':
-      return Math.max(0, el.rows) * Math.max(0, el.seatsPerRow);
+    case 'block-grid': {
+      if (el.seatPositionOverrides && Object.keys(el.seatPositionOverrides).length > 0) {
+        return Object.keys(el.seatPositionOverrides).length;
+      }
+      const rows = el.rows ?? el.seatLayout?.rows ?? 0;
+      const seatsPerRow = el.seatsPerRow ?? el.seatLayout?.seatsPerRow ?? 0;
+      return Math.max(0, rows) * Math.max(0, seatsPerRow);
+    }
     case 'seat-section':
       return el.rows.reduce((sum, row) => sum + Math.max(0, row.seatCount), 0);
     case 'layer-ring':

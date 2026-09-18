@@ -22,6 +22,7 @@ import { resolveCenterpieceShapeDraw, resolveBlockGridShapeDraw } from '../../li
 import {
   RowLabelNode,
   SeatNode,
+  buildBlockGridSeatMap,
   buildGridSeatMap,
   buildSeatSectionSeatMap,
   rowLabel,
@@ -5206,9 +5207,19 @@ export class CanvasStageComponent {
     if (el.type !== 'block-grid') {
       return vm;
     }
-    const resolved = resolveBlockGridShapeDraw(el, this.canvas.canvas());
-    const map = this.cachedSeatMap(`${el.id}:grid`, () =>
-      buildGridSeatMap(resolved.rect, el.rows, el.seatsPerRow, el.rowLabelStyle),
+    const grid = el;
+    const resolved = resolveBlockGridShapeDraw(grid, this.canvas.canvas());
+    const rows = grid.seatLayout?.rows ?? grid.rows;
+    const seatsPerRow = grid.seatLayout?.seatsPerRow ?? grid.seatsPerRow;
+    const rowLabelStyle = grid.seatLayout?.rowLabelStyle ?? grid.rowLabelStyle;
+    const map = this.cachedSeatMap(`${grid.id}:grid`, () =>
+      buildBlockGridSeatMap(resolved.rect, {
+        rows,
+        seatsPerRow,
+        rowLabelStyle,
+        seatLayout: grid.seatLayout,
+        seatPositionOverrides: grid.seatPositionOverrides,
+      }),
     );
     return {
       ...vm,

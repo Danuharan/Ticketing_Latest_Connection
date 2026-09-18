@@ -100,6 +100,107 @@ export function buildGridSeatMap(
   return { seats, rowLabels };
 }
 
+/**
+ * Materialize Block Grid seats as element-local % overrides (existing seating snapshot format).
+ * Keys match buildGridSeatMap (`A-1`, `A-2`, …).
+ */
+export function materializeBlockGridSeatOverrides(
+  rect: PixelRect,
+  rows: number,
+  seatsPerRow: number,
+  style: SeatLabelStyle = 'letter',
+): Record<string, { xPct: number; yPct: number }> {
+  const map = buildGridSeatMap(rect, rows, seatsPerRow, style);
+  const width = Math.max(1, rect.width);
+  const height = Math.max(1, rect.height);
+  const overrides: Record<string, { xPct: number; yPct: number }> = {};
+  for (const seat of map.seats) {
+    overrides[seat.key] = {
+      xPct: ((seat.x - rect.x) / width) * 100,
+      yPct: ((seat.y - rect.y) / height) * 100,
+    };
+  }
+  return overrides;
+}
+
+/** Rebuild a seat map from persisted seatPositionOverrides (% of element box). */
+export function buildGridSeatMapFromOverrides(
+  rect: PixelRect,
+  overrides: Record<string, { xPct: number; yPct: number }>,
+  style: SeatLabelStyle = 'letter',
+): SeatMap {
+  const seats: SeatNode[] = [];
+  const rowYs = new Map<string, number[]>();
+  const keys = Object.keys(overrides).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const count = Math.max(1, keys.length);
+  const approx = Math.sqrt(count);
+  const radius = Math.max(
+    1.5,
+    Math.min(rect.width / Math.max(2, approx), rect.height / Math.max(2, approx)) * 0.36,
+  );
+
+  for (const key of keys) {
+    const pos = overrides[key];
+    if (!pos) {
+      continue;
+    }
+    const x = rect.x + (pos.xPct / 100) * rect.width;
+    const y = rect.y + (pos.yPct / 100) * rect.height;
+    const dash = key.indexOf('-');
+    const rowPart = dash >= 0 ? key.slice(0, dash) : key;
+    const seatNum = dash >= 0 ? key.slice(dash + 1) : '';
+    const label = seatNum ? `${rowPart}${seatNum}` : key;
+    seats.push({ key, label, x, y, radius });
+    const ys = rowYs.get(rowPart) ?? [];
+    ys.push(y);
+    rowYs.set(rowPart, ys);
+  }
+
+  const rowLabels: RowLabelNode[] = [];
+  const padX = Math.min(22, rect.width * 0.08);
+  for (const [label, ys] of rowYs) {
+    const y = ys.reduce((sum, v) => sum + v, 0) / Math.max(1, ys.length);
+    rowLabels.push({
+      key: label,
+      label,
+      x: rect.x + padX * 0.4,
+      y: y + radius * 0.4,
+    });
+  }
+  // Prefer letter/number ordering when labels are standard row codes.
+  rowLabels.sort((a, b) => {
+    if (style === 'number') {
+      return Number(a.label) - Number(b.label);
+    }
+    return a.label.localeCompare(b.label);
+  });
+
+  return { seats, rowLabels };
+}
+
+/**
+ * Block Grid seat map: prefer persisted overrides, else regenerate from rows × seatsPerRow.
+ */
+export function buildBlockGridSeatMap(
+  rect: PixelRect,
+  source: {
+    rows: number;
+    seatsPerRow: number;
+    rowLabelStyle: SeatLabelStyle;
+    seatLayout?: { rows?: number; seatsPerRow?: number; rowLabelStyle?: SeatLabelStyle } | null;
+    seatPositionOverrides?: Record<string, { xPct: number; yPct: number }> | null;
+  },
+): SeatMap {
+  const overrides = source.seatPositionOverrides;
+  if (overrides && Object.keys(overrides).length > 0) {
+    return buildGridSeatMapFromOverrides(rect, overrides, source.rowLabelStyle);
+  }
+  const rows = source.seatLayout?.rows ?? source.rows;
+  const seatsPerRow = source.seatLayout?.seatsPerRow ?? source.seatsPerRow;
+  const style = source.seatLayout?.rowLabelStyle ?? source.rowLabelStyle;
+  return buildGridSeatMap(rect, rows, seatsPerRow, style);
+}
+
 /** Seat section: every row positioned + curved independently. */
 export function buildSeatSectionSeatMap(
   rect: PixelRect,

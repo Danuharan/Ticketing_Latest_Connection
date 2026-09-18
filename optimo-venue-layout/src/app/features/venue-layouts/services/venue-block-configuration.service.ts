@@ -119,6 +119,10 @@ export class VenueBlockConfigurationService {
         el.appliedConfigId = masterId;
         el.appliedConfigName = entry.label;
         el.blockType = 'seating';
+      } else if (el && el.type === 'block-grid') {
+        el.venueBlockId = blockId;
+        el.appliedConfigId = masterId;
+        el.appliedConfigName = entry.label;
       }
     }
 
