@@ -1,0 +1,129 @@
+<div class="designer-page flex flex-col gap-3 p-3 md:gap-4 md:p-4">
+  <section class="designer-box designer-meta-box shrink-0">
+    <div class="designer-meta__header">
+      <div class="designer-meta__fields">
+        <div class="designer-field">
+          <span class="designer-field__label">
+            Parking layout name <span class="designer-field__required" aria-hidden="true">*</span>
+          </span>
+          <input
+            #nameInput
+            type="text"
+            required
+            class="designer-field__input"
+            [class.designer-field__input--warn]="!canSave()"
+            placeholder="e.g. North Parking Lot"
+            [ngModel]="name()"
+            (ngModelChange)="name.set($event)"
+          />
+        </div>
+
+        <label class="designer-field">
+          <span class="designer-field__label">Description (optional)</span>
+          <textarea
+            rows="3"
+            class="designer-field__input designer-field__textarea"
+            placeholder="e.g. 200 spaces, accessible bays near gate 3"
+            [ngModel]="description()"
+            (ngModelChange)="description.set($event)"
+          ></textarea>
+        </label>
+      </div>
+
+      <div class="designer-meta__aside">
+        <button type="button" class="designer-back-btn" (click)="onBack()">Back</button>
+      </div>
+    </div>
+
+    <p class="designer-hint">
+      @if (isLoading()) {
+        Loading parking layout…
+      } @else {
+        This is a separate 2D layout linked to the venue — draw the parking area, add bay dividers, then save.
+      }
+      @if (!isLoading() && !canSave()) {
+        <span class="designer-hint__notice">Enter a <strong>name</strong> before saving.</span>
+      }
+      @if (saveNotice(); as msg) {
+        <span class="designer-hint__notice">{{ msg }}</span>
+      }
+    </p>
+  </section>
+
+  @if (showPlanCard()) {
+  <section class="designer-box designer-meta-box shrink-0">
+    <div class="designer-meta__header">
+      <div class="designer-meta__fields">
+        <span class="designer-field__label">Start from a plan image</span>
+
+        @switch (planAiPhase()) {
+          @case ('idle') {
+            <p class="designer-hint" style="margin:0;">
+              Upload a parking plan — Browser CV detects the lot outline and stall
+              cells; OCR places one slot per printed code (S1, T3…) with real names.
+              Gemini Flash then lists missing / wrong / misnamed slots for manual repair.
+              The image stays as a background to check against.
+            </p>
+            <label class="insp__btn insp__btn--primary" style="align-self:flex-start; cursor:pointer;">
+              Upload plan image
+              <input type="file" accept="image/*" hidden (change)="onPlanFileChosen($event)" />
+            </label>
+          }
+          @case ('preview') {
+            <div style="display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap;">
+              @if (planPreviewUrl(); as url) {
+                <img
+                  [src]="url"
+                  alt="Parking plan preview"
+                  style="max-height:90px; max-width:160px; border-radius:0.5rem; border:1px solid #e2e8f0;"
+                />
+              }
+              <span class="designer-hint" style="margin:0;">{{ planFileName() }}</span>
+              <button type="button" class="insp__btn insp__btn--primary" (click)="analyzePlanImage()">
+                Analyze &amp; create
+              </button>
+              <button type="button" class="insp__btn insp__btn--ghost" (click)="removePlanImage()">
+                Remove
+              </button>
+            </div>
+          }
+          @case ('analyzing') {
+            <p class="designer-hint" style="margin:0;">Analyzing the plan image…</p>
+          }
+        }
+      </div>
+    </div>
+  </section>
+  }
+
+  <section class="designer-workspace">
+    <div class="designer-workspace__grid designer-workspace__grid--parking">
+      <div class="designer-sidebar-col">
+        <app-parking-workspace-sidebar (back)="onBack()" (save)="onSave()" />
+        @if (parkingAudit.phase() !== 'idle') {
+          <div class="designer-box" style="margin-top:0.75rem;">
+            <app-parking-audit-panel />
+          </div>
+        }
+      </div>
+
+      <div class="designer-canvas-col designer-canvas-col--block">
+        <app-parking-workspace-stepper />
+        <div class="designer-box designer-canvas-box canvas-viewport canvas-viewport--block">
+          <app-canvas-stage />
+
+          <div class="designer-zoom designer-zoom--floating">
+            <button type="button" class="designer-zoom__btn" aria-label="Zoom out" (click)="zoomOut()">−</button>
+            <button
+              type="button"
+              class="designer-zoom__label designer-zoom__label--btn"
+              (click)="resetZoom()"
+              [attr.aria-label]="'Reset zoom to 100% (currently ' + canvas.zoom() + '%)'"
+            >{{ canvas.zoom() }}%</button>
+            <button type="button" class="designer-zoom__btn" aria-label="Zoom in" (click)="zoomIn()">+</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>

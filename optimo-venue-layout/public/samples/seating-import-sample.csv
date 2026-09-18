@@ -1,0 +1,6 @@
+block_code,rows,columns,capacity,chair_width_m,chair_length_m,seat_gap_m,row_gap_m,edge_margin_m,row_seats,curve_deg,center_row_aisle_widths_m,center_column_aisle_widths_m
+1,8,8,,0.45,0.5,0.06,0.1,0.2,,0,0.2,0.2
+2,8,8,,0.45,0.5,0.06,0.1,0.2,,2,0.2,0.2
+3,8,10,,0.45,0.5,0.06,0.1,0.2,,3,0.2,0.2
+4,8,8,,0.45,0.5,0.06,0.1,0.2,1-2:8|3-4:6,0,0.2,0.2
+5,8,,,0.45,0.5,0.06,0.1,0.2,,0,0.2,0.2

@@ -1,0 +1,237 @@
+<div class="seating-import">
+  <h3 class="designer-panel__subtitle">Bulk seat fill (CSV)</h3>
+  <p class="designer-panel__muted designer-panel__muted--tight">
+    Upload a CSV with one row per block — <strong>block_code</strong>, <strong>rows</strong>,
+    and <strong>columns</strong> (capacity optional). Chair size, gaps, and
+    <strong>edge_margin_m</strong> are read as metres. Optional
+    <strong>curve_deg</strong>, <strong>center_row_aisle_widths_m</strong>, and
+    <strong>center_column_aisle_widths_m</strong> apply when seats are created.
+    Incomplete <strong>row_seats</strong> (e.g. <code>1-2:8|3-4:</code>) fills from columns.
+    The VIEW POINT is aimed at the pitch automatically and row A of every block faces it.
+    In Excel use <strong>Save As → CSV</strong>.
+  </p>
+
+  <div class="seating-import__calibration">
+    <span class="seating-import__calibration-label">Venue scale (real sizes)</span>
+    @if (canvas.venueScaleReference(); as ref) {
+      <p class="seating-import__calibration-set">
+        📐 <strong>{{ ref }}</strong> — CSV metres now render at true size.
+        <button type="button" class="seating-import__calibration-clear" (click)="clearVenueScale()">
+          Clear
+        </button>
+      </p>
+    } @else {
+      @if (calibrationBlock(); as block) {
+        <div class="seating-import__calibration-row">
+          <span class="seating-import__calibration-block">{{ block.label }}</span>
+          <span class="designer-panel__muted seating-import__calibration-hint">pick a side:</span>
+        </div>
+        <div class="seating-import__calibration-sides">
+          @for (side of calibrationSides(); track side.id) {
+            <button
+              type="button"
+              class="seating-import__calibration-side"
+              [class.seating-import__calibration-side--active]="pickedSideId() === side.id"
+              (click)="pickCalibrationSide(side.id)"
+            >
+              {{ side.label }}
+            </button>
+          }
+        </div>
+        @if (pickedSideId() != null) {
+          <div class="seating-import__calibration-row">
+            <input
+              type="number"
+              class="seating-import__calibration-input"
+              placeholder="real length in m"
+              min="0.1"
+              step="0.1"
+              [(ngModel)]="calibrationLengthM"
+            />
+            <button type="button" class="insp__btn insp__btn--ghost" (click)="setVenueScale()">
+              Set
+            </button>
+          </div>
+          <p class="designer-panel__muted designer-panel__muted--tight">
+            The picked side is highlighted orange on the canvas — enter its real length.
+          </p>
+        } @else {
+          <p class="designer-panel__muted designer-panel__muted--tight">
+            Pick a side above — it will highlight on the canvas so you know exactly
+            which edge the measurement applies to.
+          </p>
+        }
+      } @else {
+        <p class="designer-panel__muted designer-panel__muted--tight">
+          Optional: select one block on the canvas, pick a side, and enter its real
+          length (m) — then all CSV sizes render at true scale.
+        </p>
+      }
+    }
+  </div>
+
+  <div class="seating-import__actions">
+    <label class="insp__btn insp__btn--primary insp__btn--block seating-import__file-btn">
+      Choose CSV file
+      <input
+        type="file"
+        accept=".csv,.txt,text/csv"
+        hidden
+        (change)="onFileSelected($event)"
+      />
+    </label>
+    <a
+      class="insp__btn insp__btn--ghost insp__btn--block"
+      href="samples/seating-import-sample.csv"
+      download="seating-import-sample.csv"
+      (click)="downloadSample($event)"
+    >
+      Download sample CSV
+    </a>
+  </div>
+
+  @if (parsed(); as result) {
+    <p class="designer-panel__muted designer-panel__muted--tight seating-import__status">
+      <strong>{{ fileName() }}</strong> — {{ result.rows.length }} block row{{ result.rows.length === 1 ? '' : 's' }} found.
+    </p>
+
+    @if (result.errors.length > 0) {
+      <ul class="seating-import__issues">
+        @for (issue of result.errors; track $index) {
+          <li>{{ issue }}</li>
+        }
+      </ul>
+    }
+
+    @if (result.rows.length > 0 && !report() && !importing()) {
+      <button type="button" class="insp__btn insp__btn--primary insp__btn--block" (click)="applyImport()">
+        Fill seats in {{ result.rows.length }} block{{ result.rows.length === 1 ? '' : 's' }}
+      </button>
+    }
+  }
+
+  @if (importing() && progress(); as p) {
+    <div class="seating-import__progress" role="status" aria-live="polite">
+      <div class="seating-import__progress-head">
+        <span class="seating-import__spinner" aria-hidden="true"></span>
+        <span class="seating-import__progress-label">
+          Filling <strong>{{ p.code }}</strong> — {{ p.done }}/{{ p.total }} blocks
+        </span>
+      </div>
+      <div class="seating-import__progress-track">
+        <div class="seating-import__progress-bar" [style.width.%]="progressPct()"></div>
+      </div>
+    </div>
+  }
+
+  @if (report(); as entries) {
+    <p class="designer-panel__muted designer-panel__muted--tight seating-import__status">
+      <strong>{{ filledCount() }}</strong> / {{ entries.length }} blocks filled ·
+      {{ totalImportedSeats() }} seats placed.
+    </p>
+    <ul class="seating-import__report">
+      @for (entry of entries; track $index) {
+        <li
+          class="seating-import__report-row"
+          [class.seating-import__report-row--ok]="entry.status === 'filled'"
+          [class.seating-import__report-row--skip]="entry.status === 'skipped'"
+          [class.seating-import__report-row--fail]="entry.status !== 'filled' && entry.status !== 'skipped'"
+        >
+          <span class="seating-import__report-code">
+            {{ entry.status === 'filled' ? '✓' : entry.status === 'skipped' ? '⏭' : '✕' }} {{ entry.blockCode }}
+          </span>
+          <span class="seating-import__report-detail">
+            @if (entry.status === 'filled') {
+              {{ entry.rows }} rows · {{ entry.seats }} seats{{ entry.message ? ' — ' + entry.message : '' }}
+            } @else {
+              {{ entry.message }}
+            }
+          </span>
+        </li>
+      }
+    </ul>
+    <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="reset()">
+      Import another file
+    </button>
+  }
+</div>
+
+@if (conflict(); as c) {
+  <div class="seating-import-dialog__backdrop">
+    <div class="seating-import-dialog" role="alertdialog" aria-modal="true">
+      <div class="seating-import-dialog__head">
+        <span class="seating-import-dialog__icon" aria-hidden="true">⚠</span>
+        <div class="seating-import-dialog__head-text">
+          <div class="seating-import-dialog__title">
+            Block <span class="seating-import-dialog__chip">{{ c.blockCode }}</span> can't fit the plan
+          </div>
+          <div class="seating-import-dialog__subtitle">
+            Block {{ c.index }} of {{ c.total }} — highlighted on the canvas below
+          </div>
+        </div>
+      </div>
+
+      <div class="seating-import-dialog__stats">
+        <div class="seating-import-dialog__stat">
+          <span class="seating-import-dialog__stat-label">Document asks</span>
+          <span class="seating-import-dialog__stat-value">{{ c.requestedSeats }}</span>
+          <span class="seating-import-dialog__stat-unit">seats</span>
+        </div>
+        <div class="seating-import-dialog__stat-arrow" aria-hidden="true">→</div>
+        <div class="seating-import-dialog__stat seating-import-dialog__stat--fit">
+          <span class="seating-import-dialog__stat-label">This block fits</span>
+          <span class="seating-import-dialog__stat-value">{{ c.placeableSeats }}</span>
+          <span class="seating-import-dialog__stat-unit">seats</span>
+        </div>
+        <div class="seating-import-dialog__stat seating-import-dialog__stat--miss">
+          <span class="seating-import-dialog__stat-label">Short by</span>
+          <span class="seating-import-dialog__stat-value">−{{ conflictMissingSeats() }}</span>
+          <span class="seating-import-dialog__stat-unit">seats</span>
+        </div>
+      </div>
+
+      <div class="seating-import-dialog__rows">
+        <span class="seating-import-dialog__rows-label">Rows that come up short:</span>
+        <div class="seating-import-dialog__rows-list">
+          @for (miss of conflictRowsPreview(); track miss.row) {
+            <span class="seating-import-dialog__row-pill">
+              Row {{ miss.row }} · {{ miss.placed }}<span class="seating-import-dialog__row-of">/{{ miss.requested }}</span>
+            </span>
+          }
+          @if (conflictRowsMore() > 0) {
+            <span class="seating-import-dialog__row-pill seating-import-dialog__row-pill--more">
+              +{{ conflictRowsMore() }} more rows
+            </span>
+          }
+        </div>
+      </div>
+
+      <div class="seating-import-dialog__actions">
+        <button
+          type="button"
+          class="insp__btn insp__btn--primary"
+          (click)="resolveConflict('continue')"
+        >
+          Fill {{ c.placeableSeats }} seats &amp; continue
+        </button>
+        <button type="button" class="insp__btn insp__btn--ghost" (click)="resolveConflict('skip')">
+          Skip this block
+        </button>
+      </div>
+      <button
+        type="button"
+        class="seating-import-dialog__continue-all"
+        (click)="resolveConflict('continue-all')"
+      >
+        ⚡ Fill what fits in <strong>all</strong> remaining blocks — don't ask again
+      </button>
+      <button
+        type="button"
+        class="seating-import-dialog__stop"
+        (click)="resolveConflict('stop')"
+      >
+        ⏹ Stop import here
+      </button>
+    </div>
+  </div>
+}

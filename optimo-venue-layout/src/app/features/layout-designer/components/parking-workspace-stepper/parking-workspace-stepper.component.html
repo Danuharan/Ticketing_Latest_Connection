@@ -1,0 +1,51 @@
+<div class="block-workspace-stepper__bar" role="navigation" aria-label="Parking area progress">
+  <div class="block-workspace-stepper__track">
+    @for (step of steps; track step.id; let last = $last) {
+      <div
+        class="block-workspace-stepper__step"
+        [class.block-workspace-stepper__step--complete]="stepComplete(step.id)"
+        [class.block-workspace-stepper__step--active]="stepActive(step.id)"
+        [attr.aria-current]="stepActive(step.id) ? 'step' : null"
+      >
+        <span class="block-workspace-stepper__badge" aria-hidden="true">
+          @if (stepComplete(step.id)) {
+            ✓
+          } @else {
+            {{ step.number }}
+          }
+        </span>
+        <span class="block-workspace-stepper__label">{{ step.label }}</span>
+      </div>
+      @if (!last) {
+        <span class="block-workspace-stepper__arrow" aria-hidden="true">→</span>
+      }
+    }
+  </div>
+</div>
+
+@if (showSubSteps()) {
+  <div class="block-workspace-stepper__bar" style="margin-top:0.5rem;" role="navigation" aria-label="Add parking lines progress">
+    <div class="block-workspace-stepper__track">
+      @for (step of subSteps; track step.id; let last = $last) {
+        <div
+          class="block-workspace-stepper__step"
+          [class.block-workspace-stepper__step--complete]="subStepComplete(step.id)"
+          [class.block-workspace-stepper__step--active]="subStepActive(step.id)"
+          [attr.aria-current]="subStepActive(step.id) ? 'step' : null"
+        >
+          <span class="block-workspace-stepper__badge" aria-hidden="true">
+            @if (subStepComplete(step.id)) {
+              ✓
+            } @else {
+              {{ step.number }}
+            }
+          </span>
+          <span class="block-workspace-stepper__label">{{ step.label }}</span>
+        </div>
+        @if (!last) {
+          <span class="block-workspace-stepper__arrow" aria-hidden="true">→</span>
+        }
+      }
+    </div>
+  </div>
+}

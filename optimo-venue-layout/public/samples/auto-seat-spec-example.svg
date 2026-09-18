@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1000" viewBox="0 0 800 1000">
+  <rect width="800" height="1000" fill="#f8fafc"/>
+  <rect x="40" y="40" width="720" height="920" fill="#ffffff" stroke="#cbd5e1" stroke-width="2" rx="12"/>
+
+  <text x="400" y="90" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#0f172a">SEATING CHART SPECIFICATION</text>
+  <text x="400" y="125" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="#64748b">Upload this sheet to Auto seat create (Azure OCR)</text>
+
+  <text x="80" y="180" font-family="Arial, sans-serif" font-size="20" font-weight="700" fill="#1e293b">Block name: Block 56</text>
+
+  <text x="80" y="230" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#1e293b">Block sides (metres)</text>
+  <text x="100" y="265" font-family="Arial, sans-serif" font-size="16" fill="#334155">Side 1: 5.0 m</text>
+  <text x="100" y="295" font-family="Arial, sans-serif" font-size="16" fill="#334155">Side 2: 4.7 m</text>
+  <text x="100" y="325" font-family="Arial, sans-serif" font-size="16" fill="#334155">Side 3: 5.1 m</text>
+  <text x="100" y="355" font-family="Arial, sans-serif" font-size="16" fill="#334155">Side 4: 6.6 m</text>
+
+  <text x="80" y="410" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#1e293b">Seating layout</text>
+  <text x="100" y="445" font-family="Arial, sans-serif" font-size="16" fill="#334155">Rows: 4</text>
+  <text x="100" y="475" font-family="Arial, sans-serif" font-size="16" fill="#334155">Seats per row: 8</text>
+  <text x="100" y="505" font-family="Arial, sans-serif" font-size="16" fill="#334155">VIEW POINT: Side 1 (top / audience)</text>
+
+  <text x="80" y="560" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#1e293b">Chair and gaps</text>
+  <text x="100" y="595" font-family="Arial, sans-serif" font-size="16" fill="#334155">Chair size: 0.45 m x 0.50 m</text>
+  <text x="100" y="625" font-family="Arial, sans-serif" font-size="16" fill="#334155">Seat gap: 0.10 m</text>
+  <text x="100" y="655" font-family="Arial, sans-serif" font-size="16" fill="#334155">Row gap: 0.12 m</text>
+
+  <!-- schematic block -->
+  <g transform="translate(400, 780)">
+    <polygon points="-120,-60 120,-40 100,60 -100,80" fill="#312e81" stroke="#1e1b4b" stroke-width="2"/>
+    <text x="0" y="8" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#ffffff">Block 56</text>
+    <text x="0" y="-95" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#2563eb">VIEW POINT</text>
+    <line x1="0" y1="-80" x2="0" y2="-65" stroke="#2563eb" stroke-width="2"/>
+    <text x="0" y="110" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#64748b">Seats face VIEW POINT</text>
+  </g>
+</svg>

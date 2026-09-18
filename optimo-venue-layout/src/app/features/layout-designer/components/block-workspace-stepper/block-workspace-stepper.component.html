@@ -1,0 +1,33 @@
+<div class="block-workspace-stepper__bar" role="navigation" aria-label="Block customization progress">
+  <div class="block-workspace-stepper__track">
+    @for (step of steps(); track step.id; let last = $last) {
+      <div
+        class="block-workspace-stepper__step"
+        [class.block-workspace-stepper__step--complete]="stepComplete(step.id)"
+        [class.block-workspace-stepper__step--active]="stepActive(step.id)"
+        [class.block-workspace-stepper__step--skipped]="stepSkipped(step.id)"
+        [class.block-workspace-stepper__step--clickable]="stepClickable(step.id)"
+        [attr.aria-current]="stepActive(step.id) ? 'step' : null"
+        (click)="stepClickable(step.id) ? onStepClick(step.id) : null"
+      >
+        <span class="block-workspace-stepper__badge" aria-hidden="true">
+          @if (stepComplete(step.id)) {
+            ✓
+          } @else {
+            {{ step.number }}
+          }
+        </span>
+        <span class="block-workspace-stepper__label">{{ step.label }}</span>
+      </div>
+      @if (!last) {
+        <span class="block-workspace-stepper__arrow" aria-hidden="true">→</span>
+      }
+    }
+  </div>
+
+  @if (canGoBack()) {
+    <button type="button" class="block-workspace-stepper__back" (click)="goBack()">
+      ← {{ backLabel() }}
+    </button>
+  }
+</div>

@@ -1,0 +1,368 @@
+<div class="audit-panel">
+  <div class="audit-panel__header">
+    <h3 class="designer-panel__subtitle">AI verification</h3>
+    @if (audit.phase() === 'done') {
+      <button type="button" class="audit-panel__close" title="Dismiss report" (click)="audit.reset()">×</button>
+    }
+  </div>
+
+  @switch (audit.phase()) {
+    @case ('running') {
+      <div class="ai-status">
+        <div class="ai-status__spinner"></div>
+        <p class="ai-status__title">Verifying detected blocks…</p>
+        <p class="ai-status__hint">Comparing the created blocks against the blueprint.</p>
+      </div>
+    }
+
+    @case ('error') {
+      @if (audit.error(); as err) {
+        <div
+          class="ai-error"
+          [class.ai-error--warn]="errorTone(err) === 'warn'"
+          role="alert"
+        >
+          <div class="ai-error__head">
+            <span class="ai-error__icon" aria-hidden="true">
+              @switch (err.kind) {
+                @case ('credits') {
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="5" width="20" height="14" rx="2" />
+                    <path d="M2 10h20" />
+                    <path d="M6 15h4" />
+                  </svg>
+                }
+                @case ('rate-limit') {
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7v5l3 3" />
+                  </svg>
+                }
+                @case ('network') {
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M5 12a7 7 0 0 1 11-5.7M19 12a7 7 0 0 1-.6 2.9" />
+                    <path d="M8.5 15.5a3.5 3.5 0 0 1 5.6-2.8" />
+                    <path d="M12 19h.01" />
+                    <path d="M3 3l18 18" />
+                  </svg>
+                }
+                @case ('config') {
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14.7 6.3a4 4 0 1 0-5 5L4 17a2 2 0 1 0 3 3l5.7-5.7a4 4 0 0 0 5-5l-2.6 2.6-2.3-2.3 2-2.3Z" />
+                  </svg>
+                }
+                @default {
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10.3 3.9 1.9 18a2 2 0 0 0 1.7 3h16.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+                    <path d="M12 9v4" />
+                    <path d="M12 17h.01" />
+                  </svg>
+                }
+              }
+            </span>
+            <p class="ai-error__title">{{ err.title }}</p>
+          </div>
+
+          <p class="ai-error__message">{{ err.message }}</p>
+          <p class="ai-error__hint">{{ err.hint }}</p>
+
+          <div class="ai-error__actions">
+            <button type="button" class="audit-panel__btn" (click)="audit.retry()">Re-verify</button>
+            @if (err.actionUrl) {
+              <a class="ai-error__link" [href]="err.actionUrl" target="_blank" rel="noopener noreferrer">
+                {{ err.actionLabel }}
+                <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M7 17 17 7" />
+                  <path d="M9 7h8v8" />
+                </svg>
+              </a>
+            }
+          </div>
+
+          @if (err.detail) {
+            <details class="ai-error__details">
+              <summary>Technical details</summary>
+              <pre>{{ err.detail }}</pre>
+            </details>
+          }
+        </div>
+      }
+    }
+
+    @case ('done') {
+      @if (audit.result(); as report) {
+        <div class="audit-panel__scorebox">
+          <span
+            class="audit-panel__score"
+            [class.audit-panel__score--good]="scoreTone(report.accuracyPct) === 'good'"
+            [class.audit-panel__score--ok]="scoreTone(report.accuracyPct) === 'ok'"
+            [class.audit-panel__score--bad]="scoreTone(report.accuracyPct) === 'bad'"
+          >{{ report.accuracyPct }}%</span>
+          <span class="audit-panel__meta">
+            {{ report.matchedBlocks }}/{{ report.totalRealBlocks }} blocks matched ·
+            {{ report.detectedBlockCount }} created
+          </span>
+        </div>
+
+        @if (audit.fixProgress(); as progress) {
+          <div class="audit-panel__progress" [class.audit-panel__progress--full]="progress.allResolved">
+            <div class="audit-panel__progress-head">
+              <span class="audit-panel__progress-label">
+                {{ progress.resolvedCount }}/{{ progress.totalIssues }} fixed
+              </span>
+              <span
+                class="audit-panel__progress-pct"
+                title="Projected accuracy once these fixes are re-verified"
+              >→ {{ progress.projectedPct }}%</span>
+            </div>
+            <div class="audit-panel__bar">
+              <div
+                class="audit-panel__bar-fill"
+                [style.width.%]="(100 * progress.resolvedCount) / progress.totalIssues"
+              ></div>
+            </div>
+            @if (progress.allResolved) {
+              <p class="audit-panel__progress-hint">
+                All issues resolved — click Re-verify to confirm the new score.
+              </p>
+            }
+          </div>
+        }
+
+        @if (report.confidence === 'low') {
+          <p class="audit-panel__warning">Low confidence — double-check this report against the chart.</p>
+        }
+        @if (report.summary) {
+          <p class="audit-panel__summary">{{ report.summary }}</p>
+        }
+
+        @if (report.type2Issues.length === 0 && report.type3Issues.length === 0) {
+          <p class="audit-panel__ok">No issues found — all blocks match the blueprint.</p>
+        }
+
+        @if (report.type3Issues.length > 0) {
+          <p class="audit-panel__group-title">Missing / broken blocks ({{ report.type3Issues.length }})</p>
+          <div class="audit-panel__list">
+            @for (issue of report.type3Issues; track issue.key) {
+              @let status = audit.issueStatus(issue);
+              <div
+                class="audit-panel__issue audit-panel__issue--compact"
+                [class.audit-panel__issue--done]="status === 'done'"
+                [class.audit-panel__issue--active]="audit.focusedIssueKey() === issue.key"
+              >
+                <button
+                  type="button"
+                  class="audit-panel__issue-main audit-panel__issue-main--compact"
+                  [title]="issue.note"
+                  (click)="focus(issue)"
+                >
+                  <span
+                    class="audit-panel__dot"
+                    [class.audit-panel__dot--done]="status === 'done'"
+                    [attr.aria-label]="status === 'done' ? 'Done' : 'Missing'"
+                  ></span>
+                  <span class="audit-panel__issue-label audit-panel__issue-label--compact">{{ issueLabel(issue) }}</span>
+                </button>
+                @if (status !== 'done') {
+                  <span class="audit-panel__row-actions">
+                    <button
+                      type="button"
+                      class="audit-panel__action audit-panel__action--fix"
+                      title="Fix: remove broken blocks here, turn trace mode ON — then click this block on the chart"
+                      aria-label="Fix this block"
+                      (click)="fix(issue)"
+                    >
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M14.7 6.3a4.5 4.5 0 0 0-6 5.6L3 17.6A2 2 0 1 0 5.8 20.4l5.7-5.7a4.5 4.5 0 0 0 5.6-6L14 11.8l-2.3-2.3 3-3.2Z" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="audit-panel__action audit-panel__action--ok"
+                      title="This block is fine — mark as done"
+                      aria-label="Mark block as OK"
+                      (click)="accept(issue)"
+                    >
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M4 12.5 9.5 18 20 6.5" />
+                      </svg>
+                    </button>
+                  </span>
+                } @else {
+                  <span class="audit-panel__row-actions">
+                    <button
+                      type="button"
+                      class="audit-panel__action"
+                      title="Reopen — mark this block as missing again"
+                      aria-label="Reopen this block"
+                      (click)="audit.reopenIssue(issue)"
+                    >
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M9 14 4 9l5-5" />
+                        <path d="M4 9h10a6 6 0 0 1 0 12h-3" />
+                      </svg>
+                    </button>
+                  </span>
+                }
+                @if (status !== 'done' && audit.activeFixKey() === issue.key) {
+                  <span class="audit-panel__fix-modes">
+                    <button
+                      type="button"
+                      class="audit-panel__mode"
+                      [class.audit-panel__mode--active]="audit.fixMode() === 'trace'"
+                      title="Click the block on the chart to trace it automatically"
+                      (click)="audit.setFixMode('trace')"
+                    >Trace</button>
+                    <button
+                      type="button"
+                      class="audit-panel__mode"
+                      [class.audit-panel__mode--active]="audit.fixMode() === 'draw'"
+                      title="Place dots around the block yourself, then press Complete"
+                      (click)="audit.setFixMode('draw')"
+                    >Draw dots</button>
+                  </span>
+                }
+              </div>
+            }
+          </div>
+        }
+
+        @if (report.type2Issues.length > 0) {
+          <div class="audit-panel__group-head">
+            <p class="audit-panel__group-title">Detection issues ({{ report.type2Issues.length }})</p>
+            @if (audit.autoFixableCount() > 0) {
+              <button
+                type="button"
+                class="audit-panel__fixall"
+                title="Automatically rename misnamed blocks and remove extra detections"
+                (click)="audit.fixAllDetectionIssues()"
+              >
+                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M13 2 4.5 13.5H11L9.5 22 19 10h-6.5L13 2Z" />
+                </svg>
+                Fix all ({{ audit.autoFixableCount() }})
+              </button>
+            }
+          </div>
+          <div class="audit-panel__list">
+            @for (issue of report.type2Issues; track issue.key) {
+              @let status = audit.issueStatus(issue);
+              <div
+                class="audit-panel__issue audit-panel__issue--stacked"
+                [class.audit-panel__issue--done]="status === 'done'"
+                [class.audit-panel__issue--active]="audit.focusedIssueKey() === issue.key"
+                title="Show this block on the chart"
+                (click)="focus(issue)"
+              >
+                <div class="audit-panel__issue-head">
+                  <button
+                    type="button"
+                    class="audit-panel__issue-main audit-panel__issue-main--compact"
+                    (click)="$event.stopPropagation(); focus(issue)"
+                  >
+                    <span
+                      class="audit-panel__chip"
+                      [class.audit-panel__chip--done]="status === 'done'"
+                      [class.audit-panel__chip--split]="status !== 'done' && (issue.type === 'split' || issue.type === 'merged' || issue.type === 'malformed')"
+                      [class.audit-panel__chip--misnamed]="status !== 'done' && issue.type === 'misnamed'"
+                      [class.audit-panel__chip--extra]="status !== 'done' && issue.type === 'extra'"
+                    >{{ status === 'done' ? 'Solved' : typeLabel(issue.type) }}</span>
+                    <span class="audit-panel__issue-label audit-panel__issue-label--compact">{{ issueLabel(issue) }}</span>
+                  </button>
+                  @if (status !== 'done') {
+                    <span class="audit-panel__row-actions">
+                      @if (audit.isAutoFixable(issue)) {
+                        <button
+                          type="button"
+                          class="audit-panel__action audit-panel__action--fix"
+                          [title]="autoFixTitle(issue)"
+                          [attr.aria-label]="autoFixTitle(issue)"
+                          (click)="$event.stopPropagation(); autoFix(issue)"
+                        >
+                          @if (issue.type === 'extra') {
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <path d="M3 6h18" />
+                              <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+                              <path d="M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14" />
+                            </svg>
+                          } @else {
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <path d="M13 2 4.5 13.5H11L9.5 22 19 10h-6.5L13 2Z" />
+                            </svg>
+                          }
+                        </button>
+                      } @else if (issue.type !== 'extra') {
+                        <button
+                          type="button"
+                          class="audit-panel__action audit-panel__action--fix"
+                          title="Fix: remove the broken block here, turn trace mode ON — then click this block on the chart"
+                          aria-label="Fix this block"
+                          (click)="$event.stopPropagation(); fix(issue)"
+                        >
+                          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M14.7 6.3a4.5 4.5 0 0 0-6 5.6L3 17.6A2 2 0 1 0 5.8 20.4l5.7-5.7a4.5 4.5 0 0 0 5.6-6L14 11.8l-2.3-2.3 3-3.2Z" />
+                          </svg>
+                        </button>
+                      }
+                      <button
+                        type="button"
+                        class="audit-panel__action audit-panel__action--ok"
+                        title="This block is fine — mark as solved"
+                        aria-label="Mark issue as solved"
+                        (click)="$event.stopPropagation(); accept(issue)"
+                      >
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M4 12.5 9.5 18 20 6.5" />
+                        </svg>
+                      </button>
+                    </span>
+                  } @else {
+                    <span class="audit-panel__row-actions">
+                      <button
+                        type="button"
+                        class="audit-panel__action"
+                        title="Reopen — mark this issue as unsolved again"
+                        aria-label="Reopen this issue"
+                        (click)="$event.stopPropagation(); audit.reopenIssue(issue)"
+                      >
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M9 14 4 9l5-5" />
+                          <path d="M4 9h10a6 6 0 0 1 0 12h-3" />
+                        </svg>
+                      </button>
+                    </span>
+                  }
+                </div>
+                @if (issue.note && status !== 'done') {
+                  <span class="audit-panel__note">{{ issue.note }}</span>
+                }
+                @if (status !== 'done' && audit.activeFixKey() === issue.key) {
+                  <span class="audit-panel__fix-modes">
+                    <button
+                      type="button"
+                      class="audit-panel__mode"
+                      [class.audit-panel__mode--active]="audit.fixMode() === 'trace'"
+                      title="Click the block on the chart to trace it automatically"
+                      (click)="$event.stopPropagation(); audit.setFixMode('trace')"
+                    >Trace</button>
+                    <button
+                      type="button"
+                      class="audit-panel__mode"
+                      [class.audit-panel__mode--active]="audit.fixMode() === 'draw'"
+                      title="Place dots around the block yourself, then press Complete"
+                      (click)="$event.stopPropagation(); audit.setFixMode('draw')"
+                    >Draw dots</button>
+                  </span>
+                }
+              </div>
+            }
+          </div>
+        }
+
+        <div class="audit-panel__actions">
+          <button type="button" class="audit-panel__btn" (click)="audit.retry()">Re-verify</button>
+        </div>
+      }
+    }
+  }
+</div>

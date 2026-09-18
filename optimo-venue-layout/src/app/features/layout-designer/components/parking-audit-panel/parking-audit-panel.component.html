@@ -1,0 +1,155 @@
+<div class="audit-panel">
+  <div class="audit-panel__header">
+    <h3 class="designer-panel__subtitle">Parking AI verification</h3>
+    @if (audit.phase() === 'done') {
+      <button type="button" class="audit-panel__close" title="Dismiss report" (click)="audit.reset()">×</button>
+    }
+  </div>
+
+  @switch (audit.phase()) {
+    @case ('running') {
+      <div class="ai-status">
+        <div class="ai-status__spinner"></div>
+        <p class="ai-status__title">Verifying detected stalls…</p>
+        <p class="ai-status__hint">Gemini Flash is comparing slots against the parking plan.</p>
+      </div>
+    }
+
+    @case ('error') {
+      @if (audit.error(); as err) {
+        <div
+          class="ai-error"
+          [class.ai-error--warn]="errorTone(err) === 'warn'"
+          role="alert"
+        >
+          <p class="ai-error__title">{{ err.title }}</p>
+          <p class="ai-error__message">{{ err.message }}</p>
+          <p class="ai-error__hint">{{ err.hint }}</p>
+          <div class="ai-error__actions">
+            <button type="button" class="audit-panel__btn" (click)="audit.retry()">Re-verify</button>
+            @if (err.actionUrl) {
+              <a class="ai-error__link" [href]="err.actionUrl" target="_blank" rel="noopener noreferrer">
+                {{ err.actionLabel }}
+              </a>
+            }
+          </div>
+          @if (err.detail) {
+            <details class="ai-error__details">
+              <summary>Technical details</summary>
+              <pre>{{ err.detail }}</pre>
+            </details>
+          }
+        </div>
+      }
+    }
+
+    @case ('done') {
+      @if (audit.result(); as report) {
+        <div class="audit-panel__scorebox">
+          <span class="audit-panel__score">{{ report.accuracyPct }}%</span>
+          <span class="audit-panel__meta">
+            {{ report.matchedBlocks }}/{{ report.totalRealBlocks }} stalls matched ·
+            {{ report.detectedBlockCount }} created
+          </span>
+        </div>
+
+        @if (report.confidence === 'low') {
+          <p class="audit-panel__warning">Low confidence — double-check this report against the plan.</p>
+        }
+        @if (report.summary) {
+          <p class="audit-panel__summary">{{ report.summary }}</p>
+        }
+
+        @if (report.type2Issues.length === 0 && report.type3Issues.length === 0) {
+          <p class="audit-panel__ok">No issues found — slots match the parking plan.</p>
+        }
+
+        @if (report.type3Issues.length > 0) {
+          <p class="audit-panel__group-title">Missing slots ({{ report.type3Issues.length }})</p>
+          <div class="audit-panel__list">
+            @for (issue of report.type3Issues; track issue.key) {
+              <div
+                class="audit-panel__issue audit-panel__issue--compact"
+                [class.audit-panel__issue--done]="isAccepted(issue)"
+                [class.audit-panel__issue--active]="audit.activeIssueKey() === issue.key"
+              >
+                <button
+                  type="button"
+                  class="audit-panel__issue-main audit-panel__issue-main--compact"
+                  [title]="issue.note"
+                  (click)="focus(issue)"
+                >
+                  <span class="audit-panel__issue-label audit-panel__issue-label--compact">
+                    {{ issueLabel(issue) }}
+                  </span>
+                  <span class="audit-panel__chip">{{ typeLabel(issue.type) }}</span>
+                </button>
+                @if (!isAccepted(issue)) {
+                  <span class="audit-panel__row-actions">
+                    <button type="button" class="audit-panel__action audit-panel__action--fix" title="Highlight &amp; draw manually" (click)="fix(issue)">
+                      Fix
+                    </button>
+                    <button type="button" class="audit-panel__action audit-panel__action--ok" title="Mark OK" (click)="accept(issue)">
+                      OK
+                    </button>
+                  </span>
+                }
+              </div>
+            }
+          </div>
+        }
+
+        @if (report.type2Issues.length > 0) {
+          <p class="audit-panel__group-title">Detection issues ({{ report.type2Issues.length }})</p>
+          <div class="audit-panel__list">
+            @for (issue of report.type2Issues; track issue.key) {
+              <div
+                class="audit-panel__issue audit-panel__issue--compact"
+                [class.audit-panel__issue--done]="isAccepted(issue)"
+                [class.audit-panel__issue--active]="audit.activeIssueKey() === issue.key"
+              >
+                <button
+                  type="button"
+                  class="audit-panel__issue-main audit-panel__issue-main--compact"
+                  [title]="issue.note"
+                  (click)="focus(issue)"
+                >
+                  <span class="audit-panel__issue-label audit-panel__issue-label--compact">
+                    {{ issueLabel(issue) }}
+                  </span>
+                  <span class="audit-panel__chip">{{ typeLabel(issue.type) }}</span>
+                </button>
+                @if (!isAccepted(issue)) {
+                  <span class="audit-panel__row-actions">
+                    @if (canAutoFix(issue)) {
+                      <button
+                        type="button"
+                        class="audit-panel__action audit-panel__action--fix"
+                        [title]="autoFixTitle(issue)"
+                        (click)="autoFix(issue)"
+                      >
+                        {{ issue.type === 'extra' ? 'Delete' : 'Rename' }}
+                      </button>
+                    } @else {
+                      <button type="button" class="audit-panel__action audit-panel__action--fix" title="Focus to repair manually" (click)="fix(issue)">
+                        Fix
+                      </button>
+                    }
+                    <button type="button" class="audit-panel__action audit-panel__action--ok" title="Mark OK" (click)="accept(issue)">
+                      OK
+                    </button>
+                  </span>
+                }
+              </div>
+            }
+          </div>
+        }
+
+        <div class="audit-panel__footer">
+          <button type="button" class="audit-panel__btn" (click)="audit.retry()">Re-verify</button>
+          <span class="designer-hint" style="margin:0;">Open issues: {{ audit.openIssueCount() }}</span>
+        </div>
+      }
+    }
+  }
+</div>

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "supabase-ticketing-final": {
+      "url": "https://mcp.supabase.com/mcp?project_ref=afpjzctfhtlsyqpsyzzt"
+    },
+    "supabase-new-tables-checking": {
+      "url": "https://mcp.supabase.com/mcp?project_ref=zvfjrgikjbpcovctjgln"
+    }
+  }
+}

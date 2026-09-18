@@ -1,0 +1,3090 @@
+@if (isDrawing() || selected() || canvas.autoFillLayoutMode() || variant() === 'seating-sidebar' || variant() === 'dining-sidebar' || variant() === 'block-measure') {
+  <div class="insp" [class.insp--sidebar]="variant() === 'seating-sidebar' || variant() === 'dining-sidebar' || variant() === 'block-measure'">
+
+    @if (variant() === 'full' || variant() === 'block-workspace') {
+    <div class="insp__head">
+      <div class="insp__head-text">
+        <span class="insp__eyebrow">Inspector</span>
+        <span class="insp__title">{{ inspectorTitle() }}</span>
+      </div>
+      @if (selectedCount() > 0) {
+        <div class="insp__toolbar">
+          @if (selectedCount() === 1) {
+            <button type="button" class="insp__dup" (click)="duplicate()">Duplicate</button>
+          }
+          <button type="button" class="insp__delete" (click)="remove()">
+            {{ selectedCount() > 1 ? 'Delete all' : 'Delete' }}
+          </button>
+        </div>
+      }
+    </div>
+    }
+
+  @if (showMeasurementSyncPanel()) {
+    <section class="insp__section">
+      <h3 class="insp__section-title">Other blocks updated</h3>
+      <p class="insp__hint">
+        These blocks received the same measurement scale as this block.
+        Blocks {{ measurementSyncPageLabel() }}.
+      </p>
+      @for (entry of measurementSyncVisible(); track entry.blockId) {
+        <div class="insp__nested" style="margin-bottom: 0.5rem;">
+          <p class="insp__status" style="margin-bottom: 0.25rem;">
+            <strong>{{ entry.blockName }}</strong>
+          </p>
+          <ul class="insp__hint" style="margin: 0; padding-left: 1.1rem;">
+            @for (side of entry.sides; track side.label) {
+              <li>{{ side.label }} — <strong>{{ side.lengthM }} m</strong></li>
+            }
+          </ul>
+        </div>
+      }
+      @if (measurementSyncPageCount() > 1) {
+        <div class="insp__btn-row">
+          <button
+            type="button"
+            class="insp__btn insp__btn--ghost"
+            [disabled]="!measurementSyncHasPrev()"
+            (click)="showPrevMeasurementSync()"
+          >
+            ← Back
+          </button>
+          <button
+            type="button"
+            class="insp__btn insp__btn--ghost"
+            [disabled]="!measurementSyncHasNext()"
+            (click)="showNextMeasurementSync()"
+          >
+            Next →
+          </button>
+        </div>
+      }
+    </section>
+  }
+
+  @if (showAutoFillLayoutPanel()) {
+    <section class="insp__section">
+      <h3 class="insp__section-title">Auto Fill</h3>
+      <p class="insp__hint">
+        Click blocks on the canvas to include or exclude them from Auto Fill.
+        Seats appear one by one on the canvas so you can watch the arrangement build up.
+      </p>
+      <p class="insp__status">
+        {{ selectedAutoFillBlocks().length }} block{{ selectedAutoFillBlocks().length === 1 ? '' : 's' }} selected
+        @if (autoFillAnimating()) {
+          <span> · placing seats…</span>
+        }
+      </p>
+      @if (showAutoFillSameColorDeselect()) {
+        <div class="insp__nested" style="margin-bottom: 0.5rem;">
+          <p class="insp__hint" style="margin-bottom: 0.35rem;">
+            More selected blocks share the same colour as the block you just removed.
+          </p>
+          <button
+            type="button"
+            class="insp__btn insp__btn--ghost insp__btn--block"
+            [disabled]="autoFillAnimating()"
+            (click)="deselectAutoFillSameColorBlocks()"
+          >
+            <span
+              style="display:inline-block;width:0.75rem;height:0.75rem;border-radius:2px;border:1px solid rgba(0,0,0,0.15);vertical-align:middle;margin-right:0.35rem;"
+              [style.background]="autoFillColorDeselectHint() ?? '#e2e8f0'"
+            ></span>
+            Deselect all same colour blocks ({{ autoFillSameColorSelectedCount() }})
+          </button>
+        </div>
+      }
+      <div class="insp__btn-row">
+        <button
+          type="button"
+          class="insp__btn insp__btn--primary"
+          [disabled]="selectedAutoFillBlocks().length === 0 || autoFillAnimating()"
+          (click)="runAutoFillSeatingAnimated()"
+        >
+          Auto Fill
+        </button>
+        <button
+          type="button"
+          class="insp__btn insp__btn--ghost"
+          [disabled]="autoFillAnimating() || !autoFillHasSeatedBlocks()"
+          (click)="saveAutoFillSeatedBlocks()"
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          class="insp__btn insp__btn--ghost"
+          [disabled]="autoFillAnimating()"
+          (click)="exitAutoFillLayoutMode()"
+        >
+          Cancel
+        </button>
+      </div>
+      @if (autoFillLastResult(); as result) {
+        @if (result.failureCount > 0) {
+          <p class="insp__status insp__status--warn">
+            {{ result.failureCount }} block{{ result.failureCount === 1 ? '' : 's' }} failed to Auto Fill
+          </p>
+          <ul class="insp__hint" style="margin: 0.35rem 0 0; padding-left: 1.1rem;">
+            @for (block of autoFillFailedBlocks(); track block.elementId) {
+              <li><strong>{{ block.elementName }}</strong></li>
+            }
+          </ul>
+        } @else {
+          <p class="insp__status">
+            Placed {{ result.totalSeats }} seats across {{ result.successCount }} block{{ result.successCount === 1 ? '' : 's' }}.
+          </p>
+        }
+      }
+      @if (autoFillError(); as err) {
+        <p class="insp__status insp__status--warn">{{ err }}</p>
+      }
+      <button
+        type="button"
+        class="insp__btn insp__btn--ghost insp__btn--block"
+        [disabled]="autoFillAnimating() || !canEditAutoFillConfiguration()"
+        (click)="editAutoFillConfiguration()"
+      >
+        Edit Auto Fill configuration
+      </button>
+    </section>
+  }
+
+  <!-- Active shape drawing mode -->
+  @if (variant() === 'full' && canvas.drawingElementId()) {
+    <section class="insp__section">
+      <h3 class="insp__section-title">Custom draw</h3>
+      <p class="insp__hint">
+        Click points on the canvas to trace any freeform outline. Double-click or Enter to finish (minimum 3 points). Esc to cancel.
+      </p>
+      <p class="insp__status">{{ draftCount() }} point{{ draftCount() === 1 ? '' : 's' }} placed.</p>
+      <div class="insp__btn-row">
+        <button type="button" class="insp__btn insp__btn--primary" [disabled]="draftCount() < 3" (click)="finishDraw()">Finish shape</button>
+        <button type="button" class="insp__btn insp__btn--ghost" (click)="cancelDraw()">Cancel</button>
+      </div>
+    </section>
+  }
+
+  <!-- Generic block side measurement (workspace setup or arrange-by-row tool) -->
+  @if (showBlockMeasurePanel()) {
+    <section class="insp__section">
+      @if (variant() === 'block-measure') {
+        <p class="insp__status">
+          {{ arrangeByRowMeasuredCount() }} / {{ arrangeByRowSideCount() }} sides done
+          @if (arrangeByRowPendingSideIds().length > 0) {
+            <span> · {{ arrangeByRowPendingSideIds().length }} selected</span>
+          }
+          @if (arrangeByRowMeasuredCount() === arrangeByRowSideCount() && arrangeByRowSideCount() > 0) {
+            <span> — continue to add seats below</span>
+          }
+        </p>
+      } @else {
+        <h3 class="insp__section-title">Step 1 — Block size</h3>
+        <p class="insp__hint">
+          Every side of the block is shown as a <strong>faded dashed line</strong> on the canvas. Click each line one after another — each click adds a length field below the previous one. Enter all lengths, then confirm once — every line turns <strong>green</strong>.
+        </p>
+        <p class="insp__status">
+          {{ arrangeByRowMeasuredCount() }} / {{ arrangeByRowSideCount() }} sides done
+          @if (arrangeByRowPendingSideIds().length > 0) {
+            <span> · {{ arrangeByRowPendingSideIds().length }} selected</span>
+          }
+          @if (arrangeByRowMeasuredCount() === arrangeByRowSideCount() && arrangeByRowSideCount() > 0) {
+            <span> — ready for Step 2</span>
+          }
+        </p>
+      }
+      @if (arrangeByRowHasPendingSides()) {
+        @for (entry of arrangeByRowPendingSideEntries(); track entry.logicalId) {
+          <div class="insp__nested" style="margin-top: 0.5rem;">
+            <p class="insp__status">Line: <strong>{{ entry.draft.name || entry.label }}</strong></p>
+            <label class="insp__field">
+              <span class="insp__label">Line name</span>
+              <input
+                class="insp__input"
+                type="text"
+                [ngModel]="entry.draft.name"
+                (ngModelChange)="updatePendingSideDraft(entry.logicalId, { name: $event })"
+              />
+            </label>
+            <label class="insp__field">
+              <span class="insp__label">Length (metres)</span>
+              <input
+                class="insp__input"
+                type="number"
+                min="0.1"
+                step="0.1"
+                [ngModel]="entry.draft.lengthM"
+                (ngModelChange)="updatePendingSideDraft(entry.logicalId, { lengthM: num($event) })"
+              />
+            </label>
+          </div>
+        }
+        <button
+          type="button"
+          class="insp__btn insp__btn--primary insp__btn--block"
+          [disabled]="!canConfirmAllArrangeByRowSides()"
+          (click)="confirmAllArrangeByRowSides()"
+        >
+          Confirm all sides — turn lines green
+        </button>
+        @if (!canConfirmAllArrangeByRowSides() && arrangeByRowPendingSideIds().length < arrangeByRowSideCount()) {
+          <p class="insp__hint insp__hint--emphasis">Click the remaining faded lines on the block ({{ arrangeByRowSideCount() - arrangeByRowPendingSideIds().length }} left).</p>
+        }
+      } @else if (arrangeByRowMeasuredCount() < arrangeByRowSideCount()) {
+        <p class="insp__hint insp__hint--emphasis">Click any faded line on the block to start measuring.</p>
+      } @else if (variant() !== 'block-measure') {
+        <p class="insp__status">All lines are green. Step 2 opens automatically below.</p>
+      }
+      @if (arrangeByRowWizardError(); as err) {
+        <p class="insp__status insp__status--warn">{{ err }}</p>
+      }
+      @if (variant() !== 'block-measure') {
+        <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="cancelArrangeByRow()">Cancel</button>
+      }
+    </section>
+  }
+
+  @if (variant() === 'seating-sidebar' && isArrangeByRowActive() && arrangeByRowLayoutMode()) {
+    <section class="insp__section">
+      <h3 class="insp__section-title">Step 2 — Rows &amp; seats</h3>
+      <p class="insp__hint">Each row auto-fills the block width at that depth — wider rows get more seats. Seats face the VIEW POINT direction.</p>
+      @if (arrangeByRowCapacity(); as cap) {
+        <p class="insp__status">Maximum: {{ cap.maxRows }} rows · up to {{ cap.maxSeatsPerRow }} seats on the widest row · {{ cap.maxCapacity }} total</p>
+      }
+      <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="toggleSeatSpacingConfig()">
+        {{ seatSpacingConfigOpen() ? 'Hide spacing settings' : 'Configure seat &amp; row spacing' }}
+      </button>
+      @if (seatSpacingConfigOpen()) {
+        <div class="insp__nested" style="margin-top: 0.5rem;">
+          <p class="insp__hint">Smaller chairs or tighter gaps fit more seats. Larger gaps or bigger chairs reduce capacity.</p>
+          <div class="insp__row">
+            <label class="insp__field">
+              <span class="insp__label">Chair width (m)</span>
+              <input class="insp__input" type="number" min="0.1" step="0.05" [ngModel]="draftChairWidth()" (ngModelChange)="draftChairWidth.set(num($event))" />
+            </label>
+            <label class="insp__field">
+              <span class="insp__label">Chair depth (m)</span>
+              <input class="insp__input" type="number" min="0.1" step="0.05" [ngModel]="draftChairLength()" (ngModelChange)="draftChairLength.set(num($event))" />
+            </label>
+          </div>
+          <div class="insp__row">
+            <label class="insp__field">
+              <span class="insp__label">Gap between seats (m)</span>
+              <input class="insp__input" type="number" min="0" step="0.01" [ngModel]="draftSeatGap()" (ngModelChange)="draftSeatGap.set(num($event))" />
+            </label>
+            <label class="insp__field">
+              <span class="insp__label">Gap between rows (m)</span>
+              <input class="insp__input" type="number" min="0" step="0.01" [ngModel]="draftRowGap()" (ngModelChange)="draftRowGap.set(num($event))" />
+            </label>
+          </div>
+          @if (arrangeByRowCapacity(); as capAfter) {
+            <p class="insp__status">After save: up to {{ capAfter.maxRows }} rows · {{ capAfter.maxCapacity }} seats total</p>
+          }
+          <button type="button" class="insp__btn insp__btn--primary insp__btn--block" (click)="saveSeatSpacingConfig()">Save spacing</button>
+          @if (arrangeByRowWizardError(); as err) {
+            <p class="insp__status insp__status--warn">{{ err }}</p>
+          }
+        </div>
+      } @else if (arrangeByRowCapacity()) {
+        <p class="insp__foot">Chair {{ formatMetres(draftChairWidth()) }}m × {{ formatMetres(draftChairLength()) }}m · seat gap {{ formatMetres(draftSeatGap()) }}m · row gap {{ formatMetres(draftRowGap()) }}m</p>
+      }
+      <label class="insp__field">
+        <span class="insp__label">Rows</span>
+        <input class="insp__input" type="number" min="1" [max]="arrangeByRowCapacity()?.maxRows ?? 100" [ngModel]="draftArrangeRows()" (ngModelChange)="setDraftArrangeRows(num($event))" />
+      </label>
+      @if (arrangeByRowLayoutPreview(); as preview) {
+        <div class="insp__nested" style="margin-top: 0.5rem;">
+          <p class="insp__status">Estimated layout:</p>
+          @for (count of preview.rowSeatCounts; track $index) {
+            <p class="insp__hint">Row {{ arrangeByRowPreviewLabel($index) }}: {{ count }} seat{{ count === 1 ? '' : 's' }}</p>
+          }
+          <p class="insp__status">{{ preview.totalSeats }} seats total ({{ preview.minSeatsPerRow }}–{{ preview.maxSeatsPerRow }} per row)</p>
+        </div>
+      }
+      @if (arrangeByRowWizardError(); as err) {
+        <p class="insp__status insp__status--warn">{{ err }}</p>
+      }
+      <div class="insp__btn-row">
+        <button type="button" class="insp__btn insp__btn--primary" (click)="applyArrangeByRowGrid()">Confirm &amp; place seats</button>
+        <button type="button" class="insp__btn insp__btn--ghost" (click)="cancelArrangeByRow()">Cancel</button>
+      </div>
+    </section>
+  }
+
+  <!-- Per-seat click placement mode -->
+  @if (variant() === 'seating-sidebar' && isPerSeatPlacing()) {
+    <section class="insp__section">
+      <h3 class="insp__section-title">Add seats one by one</h3>
+      <p class="insp__hint">
+        Click inside your custom shape to place each seat exactly where you want it. Press Esc when finished.
+      </p>
+      <p class="insp__status">{{ customSeatTotal() }} seat{{ customSeatTotal() === 1 ? '' : 's' }} placed</p>
+      <div class="insp__btn-row">
+        <button type="button" class="insp__btn insp__btn--primary" (click)="cancelPerSeatPlacement()">Save &amp; back to tools</button>
+      </div>
+    </section>
+  }
+
+  <!-- Custom line seat drawing mode -->
+  @if (variant() === 'seating-sidebar' && isLineSeatDrawing()) {
+    <section class="insp__section">
+      <h3 class="insp__section-title">Draw seat rows manually</h3>
+      <p class="insp__hint">
+        Click two or more points to draw one row line. Seats are placed along that line at maximum capacity for the length.
+      </p>
+      <p class="insp__status">
+        {{ lineSeatDraftCount() }} point{{ lineSeatDraftCount() === 1 ? '' : 's' }} placed
+      </p>
+      <div class="insp__btn-row">
+        <button
+          type="button"
+          class="insp__btn insp__btn--primary"
+          [disabled]="lineSeatDraftCount() < 2"
+          (click)="finishLineSeatDraw()"
+        >Place seats on line</button>
+        <button type="button" class="insp__btn insp__btn--ghost" (click)="cancelLineSeatDraw()">Back to tools</button>
+      </div>
+    </section>
+  }
+
+  <!-- Custom seat row drawing mode -->
+  @if (variant() === 'seating-sidebar' && isSeatRowDrawing()) {
+    <section class="insp__section">
+      <h3 class="insp__section-title">Draw seat area manually</h3>
+      <p class="insp__hint">
+        Trace the full seating area row by row. Draw each row as a line (2+ points for curves), complete it, then draw the next until the block is covered.
+      </p>
+      <p class="insp__status">
+        {{ seatRowCompletedCount() }} row{{ seatRowCompletedCount() === 1 ? '' : 's' }} done ·
+        current row: {{ seatRowDraftCount() }} point{{ seatRowDraftCount() === 1 ? '' : 's' }}
+      </p>
+      <div class="insp__btn-row">
+        <button type="button" class="insp__btn insp__btn--ghost" [disabled]="seatRowDraftCount() < 2" (click)="completeSeatRowDraftRow()">Complete row</button>
+        <button
+          type="button"
+          class="insp__btn insp__btn--primary"
+          [disabled]="seatRowDraftCount() < 2 && seatRowCompletedCount() === 0"
+          (click)="finishSeatRowDraw()"
+        >Finish block</button>
+        <button type="button" class="insp__btn insp__btn--ghost" (click)="cancelSeatRowDraw()">Back to tools</button>
+      </div>
+    </section>
+  }
+
+  @if (variant() !== 'block-measure' && center(); as c) {
+    @if (variant() === 'full' && !isDrawing() && isCustom() && hasCustomShape()) {
+      <section class="insp__section">
+        <h3 class="insp__section-title">Block workspace</h3>
+        <p class="insp__hint">
+          Long-press the block on the canvas, double-click it, or use the button below to set block type, VIEW POINT, and seating or table layout.
+        </p>
+        @if (canCustomizeBlock()) {
+          <button type="button" class="insp__btn insp__btn--primary insp__btn--block" (click)="openBlockWorkspace()">
+            Customize block
+          </button>
+        }
+      </section>
+
+      <section class="insp__section">
+        <h3 class="insp__section-title">Adjust edges</h3>
+        <p class="insp__hint">
+          Enable corner handles on the canvas, then drag each point to reshape this outline only.
+        </p>
+        @if (!c.adjustEdges) {
+          <button
+            type="button"
+            class="insp__btn insp__btn--primary insp__btn--block"
+            (click)="setAdjustEdges(true)"
+          >
+            Adjust edges
+          </button>
+        } @else {
+          <p class="insp__status">Corner handles are visible on the canvas.</p>
+          <button
+            type="button"
+            class="insp__btn insp__btn--ghost insp__btn--block"
+            (click)="setAdjustEdges(false)"
+          >
+            Done adjusting
+          </button>
+        }
+      </section>
+    }
+
+    @if (variant() === 'full' && !isDrawing() && isCustom() && !isCvOutline()) {
+      <section class="insp__section">
+        <h3 class="insp__section-title">Custom draw</h3>
+        <p class="insp__hint">
+          Click points on the canvas to trace any freeform outline. Use <strong>Adjust edges</strong> above to drag corner points after drawing.
+        </p>
+        @if (hasCustomShape()) {
+          <p class="insp__status">{{ c.customPoints?.length ?? 0 }} custom outline point{{ (c.customPoints?.length ?? 0) === 1 ? '' : 's' }} saved for this element.</p>
+        }
+        <div class="insp__btn-row">
+          <button type="button" class="insp__btn insp__btn--primary" (click)="startDrawOnCanvas()">Draw another outline</button>
+          <button type="button" class="insp__btn insp__btn--ghost" (click)="clearCustomShape()" [disabled]="!hasCustomShape()">Clear shape</button>
+        </div>
+
+        <div class="insp__nested">
+          <p class="insp__hint">Use + / − to create a quick base shape, then drag corner points to fine-tune.</p>
+          <div class="insp__stepper">
+            <button type="button" class="insp__step" (click)="adjustQuickSegments(-1)">−</button>
+            <span class="insp__step-val">{{ quickSegments() }}</span>
+            <button type="button" class="insp__step" (click)="adjustQuickSegments(1)">+</button>
+          </div>
+          <p class="insp__legend">1 = line, 2 = two sides, 3 = triangle, 4 = square</p>
+        </div>
+      </section>
+    }
+
+    @if (variant() === 'seating-sidebar' && !canvas.drawingElementId() && !isSeatRowDrawing() && !isLineSeatDrawing() && !isPerSeatPlacing() && !showBlockMeasurePanel() && !isArrangeByRowActive() && isCustom()) {
+      <section class="insp__section">
+        <h3 class="insp__section-title">Seats inside shape</h3>
+
+        @if (showSeatingToolPicker()) {
+          @if (seatingEnabled() && customSeatTotal() > 0) {
+            <p class="insp__status">{{ customSeatTotal() }} seat{{ customSeatTotal() === 1 ? '' : 's' }} placed</p>
+            <p class="insp__hint">
+              Use any tool below to add more seats. When finished, tap <strong>Save &amp; back to tools</strong> in the active tool, then <strong>Save layout</strong> at the bottom.
+            </p>
+            <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="toggleSeatSpacingConfig()">
+              {{ seatSpacingConfigOpen() ? 'Hide spacing settings' : 'Configure seat &amp; row spacing' }}
+            </button>
+            @if (seatSpacingConfigOpen()) {
+              <div class="insp__nested" style="margin-top: 0.5rem;">
+                <p class="insp__hint">Smaller chairs or tighter gaps fit more seats. Larger gaps or bigger chairs reduce capacity.</p>
+                <div class="insp__row">
+                  <label class="insp__field">
+                    <span class="insp__label">Chair width (m)</span>
+                    <input class="insp__input" type="number" min="0.1" step="0.05" [ngModel]="draftChairWidth()" (ngModelChange)="draftChairWidth.set(num($event))" />
+                  </label>
+                  <label class="insp__field">
+                    <span class="insp__label">Chair depth (m)</span>
+                    <input class="insp__input" type="number" min="0.1" step="0.05" [ngModel]="draftChairLength()" (ngModelChange)="draftChairLength.set(num($event))" />
+                  </label>
+                </div>
+                <div class="insp__row">
+                  <label class="insp__field">
+                    <span class="insp__label">Gap between seats (m)</span>
+                    <input class="insp__input" type="number" min="0" step="0.01" [ngModel]="draftSeatGap()" (ngModelChange)="draftSeatGap.set(num($event))" />
+                  </label>
+                  <label class="insp__field">
+                    <span class="insp__label">Gap between rows (m)</span>
+                    <input class="insp__input" type="number" min="0" step="0.01" [ngModel]="draftRowGap()" (ngModelChange)="draftRowGap.set(num($event))" />
+                  </label>
+                </div>
+                @if (arrangeByRowCapacity(); as capAfter) {
+                  <p class="insp__status">After save: up to {{ capAfter.maxRows }} rows × {{ capAfter.maxSeatsPerRow }} seats</p>
+                }
+                <button type="button" class="insp__btn insp__btn--primary insp__btn--block" (click)="saveSeatSpacingConfig()">Save spacing</button>
+                @if (arrangeByRowWizardError(); as err) {
+                  <p class="insp__status insp__status--warn">{{ err }}</p>
+                }
+              </div>
+            } @else if (arrangeByRowCapacity()) {
+              <p class="insp__foot">Chair {{ formatMetres(draftChairWidth()) }}m × {{ formatMetres(draftChairLength()) }}m · seat gap {{ formatMetres(draftSeatGap()) }}m · row gap {{ formatMetres(draftRowGap()) }}m</p>
+            }
+          } @else {
+            <p class="insp__hint">Add seating inside your custom outline. Use one tool at a time — finish with <strong>Save &amp; back to tools</strong> to return here and pick another.</p>
+          }
+          @if (customBlockCount() > 0) {
+            <p class="insp__status">{{ customSeatTotal() }} seats in {{ customBlockCount() }} locked block{{ customBlockCount() === 1 ? '' : 's' }}</p>
+          }
+          <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" [disabled]="!canUseDragSeatsOrArrangeByRow()" (click)="startDragSeatsWizard()">Drag seats</button>
+          <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" [disabled]="!canUseDragSeatsOrArrangeByRow()" (click)="startArrangeByRow()">Arrange by row</button>
+          <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" [disabled]="!hasCustomShape()" (click)="startAutoSeatCreate()">Auto seat create</button>
+          <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" [disabled]="!hasCustomShape()" (click)="startPerSeatPlacement()">Add seats one by one</button>
+          <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" [disabled]="!hasCustomShape()" (click)="startSeatsInsideShape()">Draw seat area manually</button>
+          @if (selectedSeatId(); as seatId) {
+            <div class="insp__nested" style="margin-top: 0.6rem;">
+              <span class="insp__label" style="font-weight: 700; color: #3b82f6; text-transform: uppercase; font-size: 0.65rem;">Selected seat</span>
+              <p class="insp__status" style="margin: 0.35rem 0 0.5rem;">{{ seatId }}</p>
+              <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="deleteSelectedSeat()">Delete seat</button>
+            </div>
+          }
+          @if (seatingEnabled() && customSeatTotal() > 0) {
+            <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" style="margin-top: 0.5rem;" (click)="removeSeating()">Remove all seating</button>
+          }
+        } @else if (isDragFillSeatsSession()) {
+          <p class="insp__status">Drag and fill seats · {{ customSeatTotal() }} seats</p>
+          @if (customSeatTotal() === 0) {
+            <p class="insp__hint">
+              <strong>Double-click</strong> exactly where you want the first seat on the canvas.
+            </p>
+          } @else {
+            <p class="insp__hint">
+              <strong>Double-click + drag along the row</strong> (e.g. north) to fill that line with max seats. <strong>Double-click + drag inward</strong> (toward block centre) to add multiple rows — each row gets its own max seat count for the block shape.
+            </p>
+          }
+          <div class="insp__btn-row">
+            <button type="button" class="insp__btn insp__btn--primary" (click)="finishDragFillSeats()">Save &amp; back to tools</button>
+          </div>
+        } @else if (dragSeatsWizardOpen()) {
+          <p class="insp__status">Drag seats — enter shape side lengths and chair size.</p>
+          @if (dragSeatsWizardStep() === 1) {
+            <p class="insp__hint">Step 1 of 3: Side lengths (metres) and which side faces the stadium view.</p>
+            <label class="insp__field">
+              <span class="insp__label">Stadium view side</span>
+              <select
+                class="insp__input"
+                [ngModel]="draftStadiumSideIndex()"
+                (ngModelChange)="setDraftStadiumSideIndex(num($event))"
+              >
+                @for (label of draftSideLabels(); track $index; let i = $index) {
+                  <option [ngValue]="i">{{ label }}</option>
+                }
+              </select>
+              <span class="insp__foot">The first row is placed along this side. Drag inward to fill the shape.</span>
+            </label>
+            @for (label of draftSideLabels(); track $index; let i = $index) {
+              <label
+                class="insp__field insp__field--tiny drag-seats-side-field"
+                (mouseenter)="setDragSeatsSideHighlight(i)"
+                (mouseleave)="setDragSeatsSideHighlight(null)"
+              >
+                <span class="insp__label">{{ label }} (m)</span>
+                <input
+                  class="insp__input"
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  [ngModel]="draftSideLengths()[i]"
+                  (ngModelChange)="setDraftSideLength(i, num($event))"
+                  (focusin)="setDragSeatsSideHighlight(i)"
+                  (focusout)="onDragSeatsSideFieldBlur($event, i)"
+                />
+              </label>
+            }
+            <div class="insp__btn-row">
+              <button type="button" class="insp__btn insp__btn--primary" (click)="nextDragSeatsStep()">Next — chair size</button>
+              <button type="button" class="insp__btn insp__btn--ghost" (click)="cancelDragSeatsWizard()">Cancel</button>
+            </div>
+          } @else if (dragSeatsWizardStep() === 2) {
+            <p class="insp__hint">Step 2 of 3: Chair size and seat spacing (metres).</p>
+            <div class="insp__row">
+              <label class="insp__field">
+                <span class="insp__label">Chair length (m)</span>
+                <input class="insp__input" type="number" min="0.1" step="0.05" [ngModel]="draftChairLength()" (ngModelChange)="setDraftDim('draftChairLength', num($event))" />
+              </label>
+              <label class="insp__field">
+                <span class="insp__label">Chair width (m)</span>
+                <input class="insp__input" type="number" min="0.1" step="0.05" [ngModel]="draftChairWidth()" (ngModelChange)="setDraftDim('draftChairWidth', num($event))" />
+              </label>
+            </div>
+            <label class="insp__field insp__field--tiny">
+              <span class="insp__label">Seat spacing (m)</span>
+              <input
+                class="insp__input"
+                type="number"
+                min="0"
+                step="0.01"
+                [ngModel]="draftSeatGap()"
+                (ngModelChange)="setDraftSeatGap(num($event))"
+              />
+            </label>
+            <p class="insp__foot">Seats auto-fill each row edge-to-edge inside the shape, with spacing from chair width + gap.</p>
+            <div class="insp__btn-row">
+              <button type="button" class="insp__btn insp__btn--primary" (click)="nextDragSeatsStep()">Next — place row</button>
+              <button type="button" class="insp__btn insp__btn--ghost" (click)="backDragSeatsStep()">Back</button>
+              <button type="button" class="insp__btn insp__btn--ghost" (click)="cancelDragSeatsWizard()">Cancel</button>
+            </div>
+          } @else {
+            <p class="insp__hint">
+              Step 3 of 3: Place the first row along
+              {{ stadiumSideLabel(center()?.dragSeatsStadiumSideIndex ?? draftStadiumSideIndex(), customSideCount()) }}.
+              Drag inward to add more rows — each row auto-fills the shape width.
+            </p>
+            <p class="insp__status">
+              Stadium side:
+              {{ stadiumSideLabel(draftStadiumSideIndex(), customSideCount()) }}
+            </p>
+            <p class="insp__foot">
+              First row will auto-fill up to {{ draftMaxFirstRowSeats() }} seats at this depth.
+              Wider rows below may fit more seats as you drag inward.
+            </p>
+            <div class="insp__btn-row">
+              <button type="button" class="insp__btn insp__btn--primary" (click)="applyDragSeats()">Place first row</button>
+              <button type="button" class="insp__btn insp__btn--ghost" (click)="backDragSeatsStep()">Back</button>
+              <button type="button" class="insp__btn insp__btn--ghost" (click)="cancelDragSeatsWizard()">Cancel</button>
+            </div>
+          }
+
+        } @else if (defineByRowColumnWizardOpen()) {
+          <p class="insp__status">Define by row and column</p>
+          <p class="insp__hint">Enter how many rows and columns — seats fill evenly inside your custom shape.</p>
+          <div class="insp__row">
+            <label class="insp__field">
+              <span class="insp__label">Rows</span>
+              <input
+                class="insp__input"
+                type="number"
+                min="1"
+                max="100"
+                [ngModel]="draftDefineRows()"
+                (ngModelChange)="setDraftDefineRows(num($event))"
+              />
+            </label>
+            <label class="insp__field">
+              <span class="insp__label">Columns</span>
+              <input
+                class="insp__input"
+                type="number"
+                min="1"
+                max="100"
+                [ngModel]="draftDefineColumns()"
+                (ngModelChange)="setDraftDefineColumns(num($event))"
+              />
+            </label>
+          </div>
+          <p class="insp__foot">{{ draftDefineRows() * draftDefineColumns() }} seats will be placed in a grid.</p>
+          <div class="insp__btn-row">
+            <button type="button" class="insp__btn insp__btn--primary" (click)="applyDefineByRowColumn()">Apply seats to shape</button>
+            <button type="button" class="insp__btn insp__btn--ghost" (click)="cancelDefineByRowColumnWizard()">Cancel</button>
+          </div>
+
+        } @else if (awaitingSeatDims()) {
+          <p class="insp__status">Zone locked — {{ pendingRowLineCount() }} row{{ pendingRowLineCount() === 1 ? '' : 's' }} drawn. Enter sizes for this block.</p>
+          @if (dimsWizardStep() === 1) {
+            <p class="insp__hint">Step 1 of 2: Block size (metres).</p>
+            <div class="insp__row">
+              <label class="insp__field">
+                <span class="insp__label">Block length (m)</span>
+                <input class="insp__input" type="number" min="0.1" step="0.1" [ngModel]="draftBlockLength()" (ngModelChange)="setDraftDim('draftBlockLength', num($event))" />
+              </label>
+              <label class="insp__field">
+                <span class="insp__label">Block width (m)</span>
+                <input class="insp__input" type="number" min="0.1" step="0.1" [ngModel]="draftBlockWidth()" (ngModelChange)="setDraftDim('draftBlockWidth', num($event))" />
+              </label>
+            </div>
+            <div class="insp__btn-row">
+              <button type="button" class="insp__btn insp__btn--primary" (click)="nextDimsStep()">Next — chair size</button>
+              <button type="button" class="insp__btn insp__btn--ghost" (click)="cancelSeatSetup()">Cancel</button>
+            </div>
+          } @else {
+            <p class="insp__hint">Step 2 of 2: Chair size and seat spacing (metres). Apply fills every seat inside the locked zone.</p>
+            <div class="insp__row">
+              <label class="insp__field">
+                <span class="insp__label">Chair length (m)</span>
+                <input class="insp__input" type="number" min="0.1" step="0.05" [ngModel]="draftChairLength()" (ngModelChange)="setDraftDim('draftChairLength', num($event))" />
+              </label>
+              <label class="insp__field">
+                <span class="insp__label">Chair width (m)</span>
+                <input class="insp__input" type="number" min="0.1" step="0.05" [ngModel]="draftChairWidth()" (ngModelChange)="setDraftDim('draftChairWidth', num($event))" />
+              </label>
+            </div>
+            <label class="insp__field insp__field--tiny">
+              <span class="insp__label">Seat spacing (m)</span>
+              <input
+                class="insp__input"
+                type="number"
+                min="0"
+                step="0.01"
+                [ngModel]="draftSeatGap()"
+                (ngModelChange)="setDraftSeatGap(num($event))"
+              />
+            </label>
+            <p class="insp__foot">Seats use the same chair width + gap pitch as Drag seats, facing VIEW POINT.</p>
+            @if (draftCapacity(); as cap) {
+              <p class="insp__status">This block fits up to {{ cap.maxRows }} rows × {{ cap.maxSeatsPerRow }} = {{ cap.maxCapacity }} seats</p>
+            }
+            <div class="insp__btn-row">
+              <button type="button" class="insp__btn insp__btn--primary" (click)="applySeatDimensions()">Apply seats to block</button>
+              <button type="button" class="insp__btn insp__btn--ghost" (click)="backDimsStep()">Back</button>
+              <button type="button" class="insp__btn insp__btn--ghost" (click)="cancelSeatSetup()">Cancel</button>
+            </div>
+          }
+
+        } @else if (autoSeatWizardOpen()) {
+          <p class="insp__status">Auto seat create</p>
+          <p class="insp__hint">
+            Upload a seating chart image or PDF. Azure Document Intelligence reads block side lengths,
+            rows, seats per row, chair size, and gaps — then seats are placed automatically facing VIEW POINT.
+          </p>
+          <label class="insp__field">
+            <span class="insp__label">Blueprint file (image or PDF)</span>
+            <input
+              class="insp__input"
+              type="file"
+              accept="image/*,.svg,.txt,text/plain,.pdf,application/pdf"
+              [disabled]="autoSeatAnalyzing()"
+              (change)="onAutoSeatFileSelected($event)"
+            />
+          </label>
+          <p class="insp__foot">
+            SVG and TXT sheets are parsed locally (no Azure). PNG/JPG/PDF use Azure OCR.
+            Example:
+            <a href="/samples/auto-seat-spec-example.svg" target="_blank" rel="noopener">auto-seat-spec-example.svg</a>
+          </p>
+          <div class="insp__btn-row" style="margin-bottom: 0.5rem;">
+            <button
+              type="button"
+              class="insp__btn insp__btn--ghost"
+              [disabled]="autoSeatAnalyzing()"
+              (click)="loadAutoSeatSample()"
+            >Load sample (offline)</button>
+          </div>
+          @if (autoSeatAnalyzing()) {
+            <p class="insp__status">Analyzing with Azure Document Intelligence…</p>
+          }
+          @if (autoSeatError(); as err) {
+            <p class="insp__hint" style="color: #dc2626;">{{ err }}</p>
+          }
+          @if (autoSeatParsed(); as spec) {
+            <div class="insp__nested">
+              <span class="insp__label" style="font-weight: 700; color: #3b82f6; text-transform: uppercase; font-size: 0.65rem;">
+                Parsed specification ({{ spec.confidence }})
+              </span>
+              @if (spec.blockName) {
+                <p class="insp__status" style="margin: 0.35rem 0;">Block: {{ spec.blockName }}</p>
+              }
+              <p class="insp__hint" style="margin: 0.25rem 0;">
+                Sides:
+                @for (len of spec.sideLengthsM; track $index; let i = $index) {
+                  {{ spec.sideLabels?.[i] ?? ('Side ' + (i + 1)) }} {{ len }}m@if (!$last) {, }
+                }
+              </p>
+              <p class="insp__hint" style="margin: 0.25rem 0;">
+                {{ spec.rowCount }} rows × {{ spec.seatsPerRow }} seats =
+                {{ spec.rowCount * spec.seatsPerRow }} total
+              </p>
+              <p class="insp__hint" style="margin: 0.25rem 0;">
+                Chair {{ spec.chairWidthM }}m × {{ spec.chairLengthM }}m · seat gap {{ spec.seatGapM }}m · row gap {{ spec.rowGapM }}m
+              </p>
+              @if (spec.viewpointSideIndex != null) {
+                <p class="insp__hint" style="margin: 0.25rem 0;">
+                  VIEW POINT: Side {{ spec.viewpointSideIndex + 1 }}
+                </p>
+              }
+              @for (note of autoSeatParseNotes(); track $index) {
+                <p class="insp__foot">{{ note }}</p>
+              }
+              @if (arrangeByRowWizardError(); as applyErr) {
+                <p class="insp__hint" style="color: #dc2626; margin-top: 0.35rem;">{{ applyErr }}</p>
+              }
+            </div>
+            <div class="insp__btn-row">
+              <button type="button" class="insp__btn insp__btn--primary" (click)="applyAutoSeatSpec()">Create seats</button>
+              <button type="button" class="insp__btn insp__btn--ghost" (click)="cancelAutoSeatCreate()">Cancel</button>
+            </div>
+          } @else if (!autoSeatAnalyzing()) {
+            <div class="insp__btn-row">
+              <button type="button" class="insp__btn insp__btn--ghost" (click)="cancelAutoSeatCreate()">Cancel</button>
+            </div>
+          }
+        }
+      </section>
+    }
+
+    @if (variant() === 'dining-sidebar' && !canvas.drawingElementId() && isCustom()) {
+      @if (isDiningFeatureEnabled('stage') && canvas.diningStageSelected()) {
+        <section class="insp__section">
+          <div style="margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: space-between;">
+            <h3 class="insp__section-title" style="margin: 0;">Stage properties</h3>
+            <button type="button" style="font-size: 0.72rem; color: #6366f1; background: none; border: none; cursor: pointer; text-decoration: underline; padding: 0;"
+              (click)="canvas.diningStageSelected.set(false)">← Back to table tools</button>
+          </div>
+          @if (stageSidePickActive()) {
+            <p class="insp__status">
+              @if (stageSidePickReorient()) {
+                Click a different side on the block to move and rotate the stage.
+              } @else {
+                Click a side on the block where the stage should go.
+              }
+            </p>
+            <p class="insp__hint">Highlighted edges are clickable. The stage aligns and rotates to the side you pick.</p>
+            <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="cancelStageSidePick()">Cancel</button>
+          } @else if (!hasDiningStage()) {
+            <p class="insp__hint">
+              Pick which side of the block the stage sits on. The stage rotates to match that edge.
+            </p>
+            <button
+              type="button"
+              class="insp__btn insp__btn--primary insp__btn--block"
+              [disabled]="!hasCustomShape()"
+              (click)="addDiningStage()"
+            >
+              Add stage — pick side
+            </button>
+          } @else if (diningStageSpec(); as stage) {
+            <p class="insp__status">
+              Stage on <strong>{{ currentStageSideLabel() }}</strong> — drag on canvas to fine-tune position.
+            </p>
+            <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="changeDiningStageSide()">
+              Change side
+            </button>
+            <label class="insp__field">
+              <span class="insp__label">Stage Alignment</span>
+              <select
+                class="insp__select"
+                [ngModel]="stage.alignment || 'edge'"
+                (ngModelChange)="updateDiningStageAlignment($event)"
+              >
+                <option value="edge">Border Side</option>
+                <option value="center">Center</option>
+                <option value="corner-tl">Top-Left Corner</option>
+                <option value="corner-tr">Top-Right Corner</option>
+                <option value="corner-bl">Bottom-Left Corner</option>
+                <option value="corner-br">Bottom-Right Corner</option>
+              </select>
+            </label>
+            @if (!stage.alignment || stage.alignment === 'edge') {
+            <label class="insp__field">
+              <span class="insp__label">Along front edge (m)</span>
+              <input
+                class="insp__input"
+                type="number"
+                step="0.1"
+                [ngModel]="stage.offsetAlongEdgeM ?? 0"
+                (ngModelChange)="updateDiningStageAlongEdge(num($event))"
+              />
+              <span class="insp__foot">Left (−) or right (+) from centre of the front edge.</span>
+            </label>
+            <label class="insp__field">
+              <span class="insp__label">Distance from front edge (m)</span>
+              <input
+                class="insp__input"
+                type="number"
+                [attr.min]="stage.depthM / 2"
+                step="0.1"
+                [ngModel]="stage.insetFromEdgeM ?? (stage.depthM / 2)"
+                (ngModelChange)="updateDiningStageInset(num($event))"
+              />
+              <span class="insp__foot">Stays inside the block — minimum is half the stage depth so it never crosses the border.</span>
+            </label>
+            }
+            <label class="insp__field">
+              <span class="insp__label">Width (m)</span>
+              <input
+                class="insp__input"
+                type="number"
+                min="0.5"
+                step="0.1"
+                [ngModel]="stage.widthM"
+                (ngModelChange)="updateDiningStageWidth(num($event))"
+              />
+              <span class="insp__foot">Width along the front edge.</span>
+            </label>
+            <label class="insp__field">
+              <span class="insp__label">Stage depth (m)</span>
+              <input
+                class="insp__input"
+                type="number"
+                min="0.3"
+                step="0.1"
+                [ngModel]="stage.depthM"
+                (ngModelChange)="updateDiningStageDepth(num($event))"
+              />
+              <span class="insp__foot">Depth into the room from the front edge.</span>
+            </label>
+            <label class="insp__field">
+              <span class="insp__label">Rotation (°)</span>
+              <input
+                class="insp__input"
+                type="number"
+                min="0"
+                max="359.9"
+                step="1"
+                data-testid="dining-stage-rotation-input"
+                [ngModel]="diningStageRotationDeg()"
+                (ngModelChange)="updateDiningStageRotation(num($event))"
+              />
+              <span class="insp__foot">Free angle — drag the rotate handle on the stage, or type degrees.</span>
+              <button
+                type="button"
+                class="insp__btn insp__btn--ghost insp__btn--block"
+                style="margin-top: 0.35rem;"
+                (click)="resetDiningStageRotationToWall()"
+              >
+                Reset to wall
+              </button>
+            </label>
+            <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" style="margin-top: 0.5rem;" (click)="removeDiningStage()">
+              Remove stage
+            </button>
+          }
+        </section>
+      } @else if (isDiningFeatureEnabled('foodprepare') && canvas.diningFoodPrepareSelected()) {
+        <section class="insp__section">
+          <div style="margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: space-between;">
+            <h3 class="insp__section-title" style="margin: 0;">Food Prep properties</h3>
+            <button type="button" style="font-size: 0.72rem; color: #6366f1; background: none; border: none; cursor: pointer; text-decoration: underline; padding: 0;"
+              (click)="canvas.diningFoodPrepareSelected.set(false)">← Back to table tools</button>
+          </div>
+          @if (foodPrepareSidePickActive()) {
+            <p class="insp__status">
+              @if (foodPrepareSidePickReorient()) {
+                Click a different side on the block to move and rotate the food prep area.
+              } @else {
+                Click a side on the block where the food prep area should go.
+              }
+            </p>
+            <p class="insp__hint">Highlighted edges are clickable. The food prep area aligns and rotates to the side you pick.</p>
+            <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="cancelFoodPrepareSidePick()">Cancel</button>
+          } @else if (!hasDiningFoodPrepare()) {
+            <p class="insp__hint">
+              Pick which side of the block the food preparation area sits on. The box rotates to match that edge.
+            </p>
+            <button
+              type="button"
+              class="insp__btn insp__btn--primary insp__btn--block"
+              [disabled]="!hasCustomShape()"
+              (click)="addDiningFoodPrepare()"
+            >
+              Add food prep — pick side
+            </button>
+          } @else if (diningFoodPrepareSpec(); as fp) {
+            <p class="insp__status">
+              Food prep on <strong>{{ currentFoodPrepareSideLabel() }}</strong> — drag on canvas to fine-tune position.
+            </p>
+            <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="changeDiningFoodPrepareSide()">
+              Change side
+            </button>
+            <label class="insp__field">
+              <span class="insp__label">Food Prep Alignment</span>
+              <select
+                class="insp__select"
+                [ngModel]="fp.alignment || 'edge'"
+                (ngModelChange)="updateDiningFoodPrepareAlignment($event)"
+              >
+                <option value="edge">Border Side</option>
+                <option value="center">Center</option>
+                <option value="corner-tl">Top-Left Corner</option>
+                <option value="corner-tr">Top-Right Corner</option>
+                <option value="corner-bl">Bottom-Left Corner</option>
+                <option value="corner-br">Bottom-Right Corner</option>
+              </select>
+            </label>
+            @if (!fp.alignment || fp.alignment === 'edge') {
+            <label class="insp__field">
+              <span class="insp__label">Along front edge (m)</span>
+              <input
+                class="insp__input"
+                type="number"
+                step="0.1"
+                [ngModel]="fp.offsetAlongEdgeM ?? 0"
+                (ngModelChange)="updateDiningFoodPrepareAlongEdge(num($event))"
+              />
+              <span class="insp__foot">Left (−) or right (+) from centre of the front edge.</span>
+            </label>
+            <label class="insp__field">
+              <span class="insp__label">Distance from front edge (m)</span>
+              <input
+                class="insp__input"
+                type="number"
+                [attr.min]="fp.depthM / 2"
+                step="0.1"
+                [ngModel]="fp.insetFromEdgeM ?? (fp.depthM / 2)"
+                (ngModelChange)="updateDiningFoodPrepareInset(num($event))"
+              />
+              <span class="insp__foot">Stays inside the block — minimum is half the depth so it never crosses the border.</span>
+            </label>
+            }
+            <label class="insp__field">
+              <span class="insp__label">Width (m)</span>
+              <input
+                class="insp__input"
+                type="number"
+                min="0.5"
+                step="0.1"
+                [ngModel]="fp.widthM"
+                (ngModelChange)="updateDiningFoodPrepareWidth(num($event))"
+              />
+              <span class="insp__foot">Width along the front edge.</span>
+            </label>
+            <label class="insp__field">
+              <span class="insp__label">Depth (m)</span>
+              <input
+                class="insp__input"
+                type="number"
+                min="0.3"
+                step="0.1"
+                [ngModel]="fp.depthM"
+                (ngModelChange)="updateDiningFoodPrepareDepth(num($event))"
+              />
+              <span class="insp__foot">Depth into the room from the front edge.</span>
+            </label>
+            <label class="insp__field">
+              <span class="insp__label">Rotation (°)</span>
+              <input
+                class="insp__input"
+                type="number"
+                min="0"
+                max="359.9"
+                step="1"
+                data-testid="dining-food-prep-rotation-input"
+                [ngModel]="diningFoodPrepareRotationDeg()"
+                (ngModelChange)="updateDiningFoodPrepareRotation(num($event))"
+              />
+              <span class="insp__foot">Free angle — drag the rotate handle on food prep, or type degrees.</span>
+              <button
+                type="button"
+                class="insp__btn insp__btn--ghost insp__btn--block"
+                style="margin-top: 0.35rem;"
+                (click)="resetDiningFoodPrepareRotationToWall()"
+              >
+                Reset to wall
+              </button>
+            </label>
+            <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" style="margin-top: 0.5rem;" (click)="removeDiningFoodPrepare()">
+              Remove food prep
+            </button>
+          }
+        </section>
+      } @else {
+        <section class="insp__section">
+          <h3 class="insp__section-title">Table editing tools</h3>
+
+          @if (tableGapRuleAlert(); as gapAlert) {
+            <div class="insp__inline-alert insp__inline-alert--warn" style="margin-bottom: 0.75rem;">
+              <span class="insp__inline-alert__title">Table gap rule</span>
+              <p class="insp__inline-alert__text">{{ gapAlert }}</p>
+              <button
+                type="button"
+                class="insp__btn insp__btn--ghost insp__btn--block insp__inline-alert__btn"
+                (click)="dismissTableGapRuleAlert()"
+              >OK</button>
+            </div>
+          }
+
+          @if (showManualTablePlacement()) {
+            <h4 class="designer-panel__subtitle" style="margin-bottom: 0.35rem;">Add tables one by one</h4>
+            @if (tablePlacementPhase() === 'place' || isTablePlacing()) {
+              <p class="insp__status" style="margin: 0 0 0.65rem;">
+                Now click <strong>inside the block</strong> on the canvas. Each click drops one table. The cursor is a crosshair.
+              </p>
+            } @else {
+              <p class="insp__hint" style="margin: 0 0 0.65rem;">
+                Set the table size below, then press <strong>Next</strong>. After that, click inside the block to place tables.
+              </p>
+            }
+
+            <label class="insp__field" style="margin-bottom: 0.55rem;">
+              <span class="insp__label">Table category</span>
+              <select
+                class="insp__input"
+                [ngModel]="selectedTableCategoryId()"
+                (ngModelChange)="onManualPlacementCategoryChange($event)"
+              >
+                <option value="">Select table category…</option>
+                <option [value]="tableCategoryCustomValue">Custom — enter measurements manually</option>
+                @for (cat of tableCategories(); track cat.id) {
+                  <option [value]="cat.id">{{ tableCategoryOptionLabel(cat) }}</option>
+                }
+              </select>
+            </label>
+
+            @if (tableCategories().length === 0) {
+              <p class="insp__hint" style="margin: 0 0 0.55rem;">
+                No saved categories yet. Set Round / Rectangular below, or save a category from Create &amp; Arrange Tables.
+              </p>
+            }
+
+            <label class="insp__field" style="margin-bottom: 0.55rem;">
+              <span class="insp__label">Table shape</span>
+              <select
+                class="insp__input"
+                [ngModel]="draftTableShape()"
+                (ngModelChange)="onManualPlacementShapeChange($event)"
+              >
+                <option value="round">Circular (round)</option>
+                <option value="rectangular">Rectangular</option>
+              </select>
+            </label>
+
+            @if (draftTableShape() === 'round') {
+              <label class="insp__field" style="margin-bottom: 0.55rem;">
+                <span class="insp__label">Table diameter (m)</span>
+                <input
+                  class="insp__input"
+                  type="number" min="0.1" step="0.05"
+                  [ngModel]="draftTableWidthM()"
+                  (ngModelChange)="onManualPlacementDimChange('width', $event)"
+                  (blur)="onManualPlacementDimBlur()"
+                />
+              </label>
+            } @else {
+              <div class="insp__row" style="margin-bottom: 0.55rem;">
+                <label class="insp__field">
+                  <span class="insp__label">Width (m)</span>
+                  <input
+                    class="insp__input"
+                    type="number" min="0.1" step="0.05"
+                    [ngModel]="draftTableWidthM()"
+                    (ngModelChange)="onManualPlacementDimChange('width', $event)"
+                    (blur)="onManualPlacementDimBlur()"
+                  />
+                </label>
+                <label class="insp__field">
+                  <span class="insp__label">Depth (m)</span>
+                  <input
+                    class="insp__input"
+                    type="number" min="0.1" step="0.05"
+                    [ngModel]="draftTableDepthM()"
+                    (ngModelChange)="onManualPlacementDimChange('depth', $event)"
+                    (blur)="onManualPlacementDimBlur()"
+                  />
+                </label>
+              </div>
+            }
+
+            <label class="insp__field" style="margin-bottom: 0.55rem;">
+              <span class="insp__label">Chairs per table</span>
+              <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
+                <button type="button" class="insp__step" style="padding: 0.2rem 0.55rem;"
+                  [disabled]="draftTableSeats() <= 1" (click)="adjustManualPlacementSeats(-1)">−</button>
+                <input
+                  class="insp__input"
+                  type="number"
+                  style="width: 4rem; text-align: center; font-weight: 600;"
+                  [ngModel]="draftTableSeats()"
+                  (ngModelChange)="onManualPlacementSeatsChange($event)"
+                  min="1"
+                  [attr.max]="maxDraftTableSeats()"
+                />
+                <button type="button" class="insp__step" style="padding: 0.2rem 0.55rem;"
+                  [disabled]="draftTableSeats() >= maxDraftTableSeats()" (click)="adjustManualPlacementSeats(1)">+</button>
+              </div>
+            </label>
+
+            <label class="insp__field" style="margin-bottom: 0.55rem;">
+              <span class="insp__label">Min table gap (m)</span>
+              <input
+                class="insp__input"
+                type="number" min="0" step="0.05"
+                [ngModel]="draftTableGapM()"
+                (ngModelChange)="onManualPlacementGapChange($event)"
+              />
+              <span class="insp__foot">Tables cannot be placed closer than this clear gap.</span>
+            </label>
+
+            <p class="insp__status" style="margin-bottom: 0.55rem;">
+              Placing:
+              {{ draftTableShape() === 'round' ? 'Circular' : 'Rectangular' }}
+              ·
+              @if (draftTableShape() === 'round') {
+                Ø {{ draftTableWidthM() }} m
+              } @else {
+                {{ draftTableWidthM() }} × {{ draftTableDepthM() }} m
+              }
+              · {{ draftTableSeats() }} chairs
+              · gap {{ draftTableGapM() }} m
+            </p>
+
+            @if (diningTableCount() > 0) {
+              <p class="insp__status" style="margin-bottom: 0.55rem;">
+                {{ diningTableCount() }} table{{ diningTableCount() === 1 ? '' : 's' }} placed
+              </p>
+            }
+
+            <div class="insp__btn-row" style="gap: 0.45rem;">
+              <button type="button" class="insp__btn insp__btn--ghost" style="flex: 1;" (click)="cancelTablePlacementFlow()">Cancel</button>
+              @if (tablePlacementPhase() === 'place' || isTablePlacing()) {
+                <button type="button" class="insp__btn insp__btn--primary" style="flex: 1;" (click)="finishTablePlacementFlow()">Done</button>
+              } @else {
+                <button type="button" class="insp__btn insp__btn--primary" style="flex: 1;" (click)="continueTablePlacementToCanvas()">Next</button>
+              }
+            </div>
+          } @else if (diningImageUploadOpen()) {
+            <h4 class="designer-panel__subtitle" style="margin-bottom: 0.35rem;">Upload floor plan</h4>
+            <p class="insp__hint" style="margin: 0 0 0.75rem;">
+              Upload a reference floor plan. Big circles = tables. All small dots = chairs (exact count, no extras). Dots only on one side → chairs only on that side. Arrow = EXIT.
+            </p>
+
+            <label
+              class="upload-dropzone upload-dropzone--compact"
+              (dragenter)="$event.preventDefault(); $event.stopPropagation()"
+              (dragover)="$event.preventDefault(); $event.stopPropagation(); $event.dataTransfer && ($event.dataTransfer.dropEffect = 'copy')"
+              (drop)="onDiningImageDrop($event)"
+            >
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml"
+                class="sr-only"
+                (change)="onDiningImageFileSelected($event)"
+              />
+              <span class="upload-dropzone__primary">Drop floor plan here or click to upload</span>
+              <span class="upload-dropzone__formats">PNG, JPG, WEBP, SVG</span>
+            </label>
+
+            @if (diningImageUploadAnalyzing()) {
+              <p class="insp__status" style="margin-top: 0.75rem;">Analyzing image and generating layout…</p>
+            }
+
+            @if (diningImageUploadError(); as uploadErr) {
+              <p class="insp__status insp__status--warn" style="margin-top: 0.75rem;">{{ uploadErr }}</p>
+            }
+
+            @if (diningImageUploadPreviewUrl(); as previewUrl) {
+              <div class="insp__dining-panel__preview" style="margin-top: 0.75rem;">
+                <img [src]="previewUrl" alt="Uploaded floor plan preview" />
+              </div>
+            }
+
+            @if (diningImageUploadAnalyzed()) {
+              @if (diningImageDetection(); as detection) {
+                <p class="insp__status" style="margin-top: 0.75rem;">
+                  {{ detection.structure.summary }}
+                  Confidence: {{ detection.confidence }}.
+                </p>
+              } @else {
+                <p class="insp__status" style="margin-top: 0.75rem;">{{ diningTableCount() }} table{{ diningTableCount() === 1 ? '' : 's' }} placed from image</p>
+              }
+            }
+
+            <div class="insp__btn-row" style="margin-top: 0.85rem;">
+              <button type="button" class="insp__btn insp__btn--ghost" (click)="cancelDiningImageUpload()">Cancel</button>
+              <button
+                type="button"
+                class="insp__btn insp__btn--primary"
+                style="flex: 1;"
+                [disabled]="!diningImageUploadAnalyzed() || diningImageUploadAnalyzing()"
+                (click)="saveDiningImageLayout()"
+              >
+                Save layout
+              </button>
+            </div>
+          } @else if (autoTableWizardOpen()) {
+            <h4 class="designer-panel__subtitle" style="margin-bottom: 0.35rem;">Auto table create</h4>
+            <p class="insp__hint" style="margin: 0 0 0.75rem;">
+              Upload a dining measurement sheet with block sides, table count, table size, chairs per table,
+              chair size, table gap, stage side, and exit side — tables are arranged automatically.
+            </p>
+            <label class="insp__field">
+              <span class="insp__label">Measurement sheet (image, PDF, SVG, or TXT)</span>
+              <input
+                class="insp__input"
+                type="file"
+                accept="image/*,.svg,.txt,text/plain,.pdf,application/pdf"
+                [disabled]="autoTableAnalyzing()"
+                (change)="onAutoTableFileSelected($event)"
+              />
+            </label>
+            <p class="insp__foot">
+              SVG and TXT sheets are parsed locally (no Azure). PNG/JPG/PDF use Azure OCR.
+              Example for Block 21:
+              <a href="/samples/block21auto-table-spec-example.svg" target="_blank" rel="noopener">block21auto-table-spec-example.svg</a>
+            </p>
+            <div class="insp__btn-row" style="margin-bottom: 0.5rem;">
+              <button
+                type="button"
+                class="insp__btn insp__btn--ghost"
+                [disabled]="autoTableAnalyzing()"
+                (click)="loadAutoTableSample()"
+              >Load Block 21 sample (offline)</button>
+            </div>
+            @if (autoTableAnalyzing()) {
+              <p class="insp__status">Analyzing measurement sheet…</p>
+            }
+            @if (autoTableError(); as err) {
+              <p class="insp__hint" style="color: #dc2626;">{{ err }}</p>
+            }
+            @if (autoTableNoSpaceMessage(); as noSpaceMsg) {
+              <div class="insp__inline-alert insp__inline-alert--warn">
+                <span class="insp__inline-alert__title">No spaces</span>
+                <p class="insp__inline-alert__text">{{ noSpaceMsg }}</p>
+                <button
+                  type="button"
+                  class="insp__btn insp__btn--ghost insp__btn--block insp__inline-alert__btn"
+                  (click)="dismissAutoTableNoSpace()"
+                >OK</button>
+              </div>
+            }
+            @if (autoTableLayoutApplied()) {
+              <p class="insp__status" style="margin: 0.75rem 0;">
+                {{ diningTableCount() }} table{{ diningTableCount() === 1 ? '' : 's' }} created on this block.
+              </p>
+              <p class="insp__hint" style="margin-bottom: 0.75rem;">
+                Click Cancel to return to Select Tool and remove all tables, stage, and exit created from this sheet.
+              </p>
+              <div class="insp__btn-row">
+                <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="cancelAutoTableCreate()">Cancel</button>
+              </div>
+            } @else if (autoTableParsed(); as spec) {
+              <div class="insp__nested">
+                <span class="insp__label" style="font-weight: 700; color: #3b82f6; text-transform: uppercase; font-size: 0.65rem;">
+                  Parsed specification ({{ spec.confidence }})
+                </span>
+                @if (spec.blockName) {
+                  <p class="insp__status" style="margin: 0.35rem 0;">Block: {{ spec.blockName }}</p>
+                }
+                <p class="insp__hint" style="margin: 0.25rem 0;">
+                  Sides:
+                  @for (len of spec.sideLengthsM; track $index; let i = $index) {
+                    {{ spec.sideLabels?.[i] ?? ('Side ' + (i + 1)) }} {{ len }}m@if (!$last) {, }
+                  }
+                </p>
+                <p class="insp__hint" style="margin: 0.25rem 0;">
+                  {{ spec.tableCount }} {{ spec.tableShape }} tables · {{ spec.tableWidthM }}m
+                  @if (spec.tableShape === 'rectangular') {
+                    × {{ spec.tableDepthM }}m
+                  }
+                  · {{ spec.chairsPerTable }} chairs each
+                </p>
+                <p class="insp__hint" style="margin: 0.25rem 0;">
+                  Chair {{ spec.chairWidthM }}m × {{ spec.chairLengthM }}m · table gap {{ spec.tableGapM }}m
+                </p>
+                @if (spec.stageSideIndex != null) {
+                  <p class="insp__hint" style="margin: 0.25rem 0;">Stage: Side {{ spec.stageSideIndex + 1 }}</p>
+                }
+                @if (spec.exitSideIndex != null) {
+                  <p class="insp__hint" style="margin: 0.25rem 0;">Exit: Side {{ spec.exitSideIndex + 1 }}</p>
+                }
+                @for (note of autoTableParseNotes(); track $index) {
+                  <p class="insp__foot">{{ note }}</p>
+                }
+              </div>
+              <div class="insp__btn-row">
+                <button type="button" class="insp__btn insp__btn--primary" (click)="applyAutoTableSpec()">Create tables</button>
+                <button type="button" class="insp__btn insp__btn--ghost" (click)="cancelAutoTableCreate()">Cancel</button>
+              </div>
+            } @else if (!autoTableAnalyzing()) {
+              <div class="insp__btn-row">
+                <button type="button" class="insp__btn insp__btn--ghost" (click)="cancelAutoTableCreate()">Cancel</button>
+              </div>
+            }
+          } @else {
+          <div class="insp__dining-stepper">
+            <div class="insp__dining-stepper__head">
+              <span class="insp__dining-stepper__label">Step {{ diningWizardStep() }} of {{ diningWizardTotalSteps }}</span>
+              <span class="insp__dining-stepper__name">
+                @switch (diningWizardStep()) {
+                  @case (1) { Select Tool }
+                  @case (2) { Access Points }
+                  @case (3) { Active Features }
+                  @case (4) { Table &amp; Chair }
+                  @case (5) { Generate Layout }
+                }
+              </span>
+            </div>
+            <div class="insp__dining-stepper__track">
+              @for (s of [1, 2, 3, 4, 5]; track s) {
+                <div
+                  class="insp__dining-stepper__dot"
+                  [class.insp__dining-stepper__dot--active]="s <= diningWizardStep()"
+                ></div>
+              }
+            </div>
+          </div>
+
+          @if (diningWizardStep() > 1) {
+            @if (diningBackgroundNeedsAdjust()) {
+              <p class="insp__status insp__status--warn" style="margin: 0 0 0.55rem;">
+                Background image may need readjustment after the block shape changed.
+                <button type="button" class="insp__dining-bg-warn-link" (click)="startDiningBackgroundAdjust()">Adjust Background</button>
+              </p>
+            }
+            <div class="insp__dining-bg-compact">
+              @if (diningBackgroundImage(); as bg) {
+                <span class="insp__dining-bg-compact__label">Background {{ bg.visible === false ? '(hidden)' : '' }}</span>
+                <button type="button" class="insp__btn insp__btn--ghost" (click)="startDiningBackgroundAdjust()">Edit Background</button>
+                <button type="button" class="insp__btn insp__btn--ghost" (click)="toggleDiningBackgroundVisible()">
+                  {{ bg.visible === false ? 'Show' : 'Hide' }}
+                </button>
+                <label class="insp__btn insp__btn--ghost insp__dining-bg-upload">
+                  Replace
+                  <input type="file" accept="image/png,image/jpeg,image/jpg,image/webp" class="sr-only" (change)="onDiningBackgroundFileSelected($event)" />
+                </label>
+                <button type="button" class="insp__btn insp__btn--ghost" (click)="removeDiningBackground()">Remove</button>
+              } @else {
+                <label class="insp__btn insp__btn--ghost insp__dining-bg-upload">
+                  Upload background
+                  <input type="file" accept="image/png,image/jpeg,image/jpg,image/webp" class="sr-only" (change)="onDiningBackgroundFileSelected($event)" />
+                </label>
+              }
+            </div>
+          }
+
+          <!-- ── STEP 1: Select Tool ── -->
+          @if (diningWizardStep() === 1) {
+            @if (hasFixedDiningLayout()) {
+              <div style="margin-bottom: 0.75rem; padding: 0.55rem 0.65rem; border-radius: 8px; background: #f1f5f9;">
+                <p class="insp__status" style="margin: 0 0 0.35rem;">
+                  Layout fixed
+                  @if (appliedLayoutTemplateLabel(); as layoutName) {
+                    · {{ layoutName }}
+                  }
+                  · {{ diningTableCount() }} table{{ diningTableCount() === 1 ? '' : 's' }}
+                </p>
+                <label class="insp__field" style="margin-bottom: 0.45rem;">
+                  <span class="insp__label">Min table gap rule (m)</span>
+                  <input
+                    class="insp__input"
+                    type="number" min="0" step="0.05"
+                    [ngModel]="currentTableGapRuleM()"
+                    (ngModelChange)="updateTableGapRule($event)"
+                  />
+                  <span class="insp__foot">Drag tables freely, but not closer than this gap — an alert blocks the move.</span>
+                </label>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;">
+                  <button
+                    type="button"
+                    style="font-size: 0.75rem; color: #2563eb; background: none; border: none; cursor: pointer; text-decoration: underline; padding: 0;"
+                    (click)="startLayoutTemplateChange()"
+                  >
+                    Go to templates
+                  </button>
+                  <button
+                    type="button"
+                    style="font-size: 0.75rem; color: #dc2626; background: none; border: none; cursor: pointer; text-decoration: underline; padding: 0;"
+                    (click)="clearFixedDiningLayout()"
+                  >
+                    Clear layout
+                  </button>
+                </div>
+              </div>
+            }
+
+            <p class="insp__hint" style="margin-bottom: 0.75rem;">
+              Select a method to place and configure dining tables in this block.
+            </p>
+
+            <div class="insp__dining-callout insp__dining-bg-card">
+              <span class="insp__dining-callout__title">Block background</span>
+              <p class="insp__dining-callout__text">
+                Upload a floor-plan image for this block only. Crop it to the block shape, then apply — tables and access points stay on top.
+              </p>
+              @if (diningBackgroundNeedsAdjust()) {
+                <p class="insp__status insp__status--warn" style="margin: 0 0 0.55rem;">
+                  Background image may need readjustment after the block shape changed.
+                  <button type="button" class="insp__dining-bg-warn-link" (click)="startDiningBackgroundAdjust()">Adjust Background</button>
+                </p>
+              }
+              @if (diningBackgroundImage(); as bg) {
+                <p class="insp__dining-callout__status">
+                  {{ bg.name || 'Background image' }}
+                  @if (bg.visible === false) { · hidden }
+                </p>
+                <div class="insp__dining-access-actions">
+                  <button type="button" class="insp__btn insp__btn--ghost" (click)="startDiningBackgroundAdjust()">Edit Background</button>
+                  <button type="button" class="insp__btn insp__btn--ghost" (click)="toggleDiningBackgroundVisible()">
+                    {{ bg.visible === false ? 'Show' : 'Hide' }}
+                  </button>
+                  <label class="insp__btn insp__btn--ghost insp__dining-bg-upload">
+                    Replace
+                    <input type="file" accept="image/png,image/jpeg,image/jpg,image/webp" class="sr-only" (change)="onDiningBackgroundFileSelected($event)" />
+                  </label>
+                  <button type="button" class="insp__btn insp__btn--ghost" (click)="removeDiningBackground()">Remove</button>
+                </div>
+              } @else {
+                <label
+                  class="upload-dropzone upload-dropzone--compact"
+                  (dragenter)="$event.preventDefault(); $event.stopPropagation()"
+                  (dragover)="$event.preventDefault(); $event.stopPropagation(); $event.dataTransfer && ($event.dataTransfer.dropEffect = 'copy')"
+                  (drop)="onDiningBackgroundDrop($event)"
+                >
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                    class="sr-only"
+                    (change)="onDiningBackgroundFileSelected($event)"
+                  />
+                  <span class="upload-dropzone__primary">Drop image or click to upload</span>
+                  <span class="upload-dropzone__formats">PNG, JPG, WEBP</span>
+                </label>
+              }
+              @if (diningBackgroundError(); as bgErr) {
+                <p class="insp__status insp__status--warn" style="margin-top: 0.55rem;">{{ bgErr }}</p>
+              }
+            </div>
+
+            <div class="insp__dining-tool-list">
+              <button type="button" class="insp__dining-tool insp__dining-tool--primary" (click)="startTableCreateWizard()">
+                <span class="insp__dining-tool__title">Create &amp; Arrange Tables</span>
+                <span class="insp__dining-tool__desc">Automatically compute layout templates based on block dimensions and features.</span>
+              </button>
+
+              <button type="button" class="insp__dining-tool" (click)="startTablePlacement()">
+                <span class="insp__dining-tool__title">Add Tables One by One</span>
+                <span class="insp__dining-tool__desc">Place tables manually on the canvas one at a time.</span>
+              </button>
+
+              <button type="button" class="insp__dining-tool" (click)="startDiningImageUpload()">
+                <span class="insp__dining-tool__title">Upload Image</span>
+                <span class="insp__dining-tool__desc">Upload a floor plan — detect tables and features, then adjust each element on the canvas.</span>
+              </button>
+
+              <button type="button" class="insp__dining-tool" (click)="startAutoTableCreate()">
+                <span class="insp__dining-tool__title">Auto table create (measurement sheet)</span>
+                <span class="insp__dining-tool__desc">Upload a specification with block sides, table count, sizes, stage and exit — like seating auto-create.</span>
+              </button>
+            </div>
+          }
+
+          <!-- ── STEP 2: Access Points ── -->
+          @if (diningWizardStep() === 2) {
+            <p class="insp__hint" style="margin-bottom: 0.75rem;">
+              Place access openings on the block edges. Move the cursor along a side, then click to confirm. After placing, click and hold on the opening to drag it along the edge.
+            </p>
+
+            <div class="insp__dining-callout insp__dining-access-card">
+              <span class="insp__dining-callout__title">Access points</span>
+
+              <fieldset class="insp__dining-access-mode">
+                <legend>Access mode</legend>
+                <label class="insp__dining-access-mode__opt">
+                  <input
+                    type="radio"
+                    name="dining-access-mode"
+                    [checked]="diningAccessMode() === 'separate'"
+                    (change)="selectDiningAccessMode('separate')"
+                  />
+                  Separate Entrance &amp; Exit
+                </label>
+                <label class="insp__dining-access-mode__opt">
+                  <input
+                    type="radio"
+                    name="dining-access-mode"
+                    [checked]="diningAccessMode() === 'shared'"
+                    (change)="selectDiningAccessMode('shared')"
+                  />
+                  Shared Entrance &amp; Exit
+                </label>
+              </fieldset>
+
+              @if (accessModeSwitchPrompt()) {
+                <div class="insp__dining-access-confirm">
+                  <p>Switching to Shared Access requires one access point.</p>
+                  <div class="insp__dining-access-actions">
+                    <button type="button" class="insp__btn insp__btn--ghost" (click)="confirmSharedFrom('entrance')">Use Entrance</button>
+                    <button type="button" class="insp__btn insp__btn--ghost" (click)="confirmSharedFrom('exit')">Use Exit</button>
+                    <button type="button" class="insp__btn insp__btn--ghost" (click)="cancelAccessModeSwitch()">Cancel</button>
+                  </div>
+                </div>
+              }
+
+              @if (isAccessPointPlacing()) {
+                <p class="insp__dining-callout__text">
+                  {{
+                    accessPointPlacementHint()
+                      ?? (accessPointPlacementKind() === 'entrance'
+                        ? 'Click on a block edge to place the entrance.'
+                        : accessPointPlacementKind() === 'shared'
+                          ? 'Click on a block edge to place the shared access point.'
+                          : 'Click on a block edge to place the exit.')
+                  }}
+                </p>
+                <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="cancelAccessPointPlacement()">Cancel placement</button>
+              } @else if (diningAccessMode() === 'shared') {
+                <div class="insp__dining-access-block">
+                  <span class="insp__dining-access-block__title">Entry / Exit</span>
+                  @if (hasDiningSharedAccess()) {
+                    <p class="insp__dining-callout__status">
+                      {{ accessPointSideLabel(center()?.diningSharedAccessPoint?.sideEdgeId) }}
+                      · Width <span class="insp__dining-access-width-value">{{ accessWidthLabel(center()?.diningSharedAccessPoint) }}</span>
+                    </p>
+                    <label class="insp__dining-access-width">
+                      <span>Width (m)</span>
+                      <input
+                        class="insp__input insp__input--access-width"
+                        type="number"
+                        [min]="minAccessWidthM"
+                        [attr.max]="sharedMaxWidthM()"
+                        step="0.1"
+                        [ngModel]="sharedAccessWidthM()"
+                        (ngModelChange)="updatePlacedAccessWidth('shared', $event)"
+                        (blur)="commitAccessWidthEdit()"
+                        (pointerdown)="$event.stopPropagation()"
+                        (mousedown)="$event.stopPropagation()"
+                        (click)="$event.stopPropagation()"
+                      />
+                    </label>
+                    <div class="insp__dining-access-actions">
+                      <button type="button" class="insp__btn insp__btn--primary insp__dining-access-btn insp__dining-access-btn--shared" (click)="startSharedAccessPlacement()">Change Access Point</button>
+                      <button type="button" class="insp__btn insp__btn--ghost" (click)="removeDiningSharedAccess()">Remove</button>
+                    </div>
+                  } @else {
+                    <p class="insp__dining-callout__status"><span class="insp__dining-access-missing">Not set</span></p>
+                    <div class="insp__dining-access-actions">
+                      <button type="button" class="insp__btn insp__btn--primary insp__dining-access-btn insp__dining-access-btn--shared" (click)="startSharedAccessPlacement()">Set Shared Access Point</button>
+                    </div>
+                  }
+                </div>
+              } @else {
+                <div class="insp__dining-access-block">
+                  <span class="insp__dining-access-block__title">Entrance</span>
+                  @if (hasDiningEntrance()) {
+                    <p class="insp__dining-callout__status">
+                      {{ accessPointSideLabel(center()?.diningEntrance?.sideEdgeId) }}
+                      · Width <span class="insp__dining-access-width-value">{{ accessWidthLabel(center()?.diningEntrance) }}</span>
+                    </p>
+                    <label class="insp__dining-access-width">
+                      <span>Width (m)</span>
+                      <input
+                        class="insp__input insp__input--access-width"
+                        type="number"
+                        [min]="minAccessWidthM"
+                        [attr.max]="entranceMaxWidthM()"
+                        step="0.1"
+                        [ngModel]="entranceWidthM()"
+                        (ngModelChange)="updatePlacedAccessWidth('entrance', $event)"
+                        (blur)="commitAccessWidthEdit()"
+                        (pointerdown)="$event.stopPropagation()"
+                        (mousedown)="$event.stopPropagation()"
+                        (click)="$event.stopPropagation()"
+                      />
+                    </label>
+                  } @else {
+                    <p class="insp__dining-callout__status"><span class="insp__dining-access-missing">Not set</span></p>
+                  }
+                  <div class="insp__dining-access-actions">
+                    <button type="button" class="insp__btn insp__btn--primary insp__dining-access-btn insp__dining-access-btn--entrance" (click)="startEntrancePlacement()">
+                      {{ hasDiningEntrance() ? 'Change Entrance' : 'Set Entrance' }}
+                    </button>
+                    <button type="button" class="insp__btn insp__btn--ghost" [disabled]="!hasDiningEntrance()" (click)="removeDiningEntrance()">Remove</button>
+                  </div>
+                </div>
+
+                <div class="insp__dining-access-block">
+                  <span class="insp__dining-access-block__title">Exit</span>
+                  @if (hasDiningExit()) {
+                    <p class="insp__dining-callout__status">
+                      {{ accessPointSideLabel(center()?.diningExit?.sideEdgeId) }}
+                      · Width <span class="insp__dining-access-width-value">{{ accessWidthLabel(center()?.diningExit) }}</span>
+                    </p>
+                    <label class="insp__dining-access-width">
+                      <span>Width (m)</span>
+                      <input
+                        class="insp__input insp__input--access-width"
+                        type="number"
+                        [min]="minAccessWidthM"
+                        [attr.max]="exitMaxWidthM()"
+                        step="0.1"
+                        [ngModel]="exitWidthM()"
+                        (ngModelChange)="updatePlacedAccessWidth('exit', $event)"
+                        (blur)="commitAccessWidthEdit()"
+                        (pointerdown)="$event.stopPropagation()"
+                        (mousedown)="$event.stopPropagation()"
+                        (click)="$event.stopPropagation()"
+                      />
+                    </label>
+                  } @else {
+                    <p class="insp__dining-callout__status"><span class="insp__dining-access-missing">Not set</span></p>
+                  }
+                  <div class="insp__dining-access-actions">
+                    <button type="button" class="insp__btn insp__btn--primary insp__dining-access-btn insp__dining-access-btn--exit" (click)="startExitPlacement()">
+                      {{ hasDiningExit() ? 'Change Exit' : 'Set Exit' }}
+                    </button>
+                    <button type="button" class="insp__btn insp__btn--ghost" [disabled]="!hasDiningExit()" (click)="removeDiningExit()">Remove</button>
+                  </div>
+                </div>
+              }
+
+              <p class="insp__dining-access-width-hint" [class.insp__dining-access-width-hint--empty]="!accessWidthHint()">
+                {{ accessWidthHint() || '\u00a0' }}
+              </p>
+            </div>
+
+            @if (accessPointsError(); as accessErr) {
+              <p class="insp__status insp__status--warn" style="margin-top: 0.55rem;">{{ accessErr }}</p>
+            }
+
+            <div class="insp__btn-row" style="margin-top: 0.75rem;">
+              <button type="button" class="insp__btn insp__btn--ghost" (click)="goToStep(1)">Back</button>
+              <button type="button" class="insp__btn insp__btn--ghost" (click)="cancelTableCreateWizard()">Cancel</button>
+              <button type="button" class="insp__btn insp__btn--primary" style="flex: 1;" (click)="continueFromAccessPoints()">Continue to Step 3</button>
+            </div>
+          }
+
+          <!-- ── STEP 3: Click active Features ── -->
+          @if (diningWizardStep() === 3) {
+            <p class="insp__hint" style="margin-bottom: 0.75rem;">
+              Check the boxes to place features on the canvas. Click a stage or food-prep area to select it, then drag to move, use edge handles to resize, and the blue knob to rotate.
+            </p>
+
+            <div class="insp__section insp__section--highlight insp__dining-features" style="margin-bottom: 0.75rem;">
+              <span class="insp__dining-features-title">⚙ Active Features</span>
+
+              <!-- Stage -->
+              <div class="insp__dining-features-item" style="margin-bottom: 0.6rem;">
+                <label class="insp__dining-features-check">
+                  <input type="checkbox"
+                    [checked]="isDraftDiningFeatureEnabled('stage')"
+                    (change)="toggleDraftDiningFeature('stage')" />
+                  <span class="insp__dining-features-label insp__dining-features-label--stage">Stage</span>
+                </label>
+              </div>
+
+              <!-- Food Prep -->
+              <div class="insp__dining-features-item" style="margin-bottom: 0.6rem;">
+                <label class="insp__dining-features-check">
+                  <input
+                    type="checkbox"
+                    [checked]="isDraftDiningFeatureEnabled('foodprepare')"
+                    (change)="toggleDraftDiningFeature('foodprepare')"
+                  />
+                  <span class="insp__dining-features-label insp__dining-features-label--food">Food Prep</span>
+                </label>
+              </div>
+
+              <!-- Service Route -->
+              <div class="insp__dining-features-item">
+                <label class="insp__dining-features-check">
+                  <input type="checkbox"
+                    [checked]="isDraftDiningFeatureEnabled('serviceroute')"
+                    (change)="toggleDraftDiningFeature('serviceroute')" />
+                  <span class="insp__dining-features-label insp__dining-features-label--service">🛤 Service Route</span>
+                </label>
+                @if (isDraftDiningFeatureEnabled('serviceroute')) {
+                  <div class="insp__dining-features-fields" style="margin-top: 0.35rem;">
+                    <label class="insp__field">
+                      <span class="insp__label">Aisle width (m)</span>
+                      <input class="insp__input" type="number" min="0.5" step="0.1"
+                        [ngModel]="draftServiceRouteWidthM()" (ngModelChange)="draftServiceRouteWidthM.set(num($event)); onTableCreateDimsChange()" />
+                    </label>
+                  </div>
+                }
+              </div>
+            </div>
+
+            <div class="insp__btn-row" style="margin-top: 0.75rem;">
+              <button type="button" class="insp__btn insp__btn--ghost" (click)="goToStep(2)">Back</button>
+              <button type="button" class="insp__btn insp__btn--ghost" (click)="cancelTableCreateWizard()">Cancel</button>
+              <button type="button" class="insp__btn insp__btn--primary" style="flex: 1;" (click)="goToStep(4)">Continue to Step 4</button>
+            </div>
+          }
+
+          <!-- ── STEP 4: Table category & measurements ── -->
+          @if (diningWizardStep() === 4) {
+            <p class="insp__hint" style="margin-bottom: 0.75rem;">
+              Select a saved table category from the dropdown to load its measurements, or choose Custom to enter table and chair sizes here.
+            </p>
+
+            <div style="display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 0.75rem;">
+              <label class="insp__field">
+                <span class="insp__label">Table category</span>
+                <select
+                  class="insp__input"
+                  [ngModel]="selectedTableCategoryId()"
+                  (ngModelChange)="onTableCategoryChange($event)"
+                >
+                  <option value="">Select table category…</option>
+                  <option [value]="tableCategoryCustomValue">Custom — enter measurements manually</option>
+                  @for (cat of tableCategories(); track cat.id) {
+                    <option [value]="cat.id">{{ tableCategoryOptionLabel(cat) }}</option>
+                  }
+                </select>
+              </label>
+
+              @if (tableCategories().length === 0) {
+                <p class="insp__hint" style="margin: 0;">No saved categories yet. Enter measurements below and save as a category on this step.</p>
+              }
+
+              @if (showTableCategoryDelete()) {
+                <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="deleteSelectedTableCategory()">
+                  Delete selected category
+                </button>
+              }
+
+              <div class="insp__dining-divider">
+                <span class="insp__label" style="display: block; margin-bottom: 0.45rem; font-weight: 700;">Table measurements</span>
+
+                <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+                  <label class="insp__field">
+                    <span class="insp__label">Table shape</span>
+                    <select
+                      class="insp__input"
+                      data-testid="dining-table-shape-select"
+                      [ngModel]="tableShapeSelectValue()"
+                      (ngModelChange)="onTableShapeChange($event)"
+                    >
+                      @for (option of diningTableMixShapes; track option.shape) {
+                        <option [value]="option.shape">{{ option.label }}</option>
+                      }
+                      <option [value]="multiShapeSelectValue">Multiple shapes…</option>
+                    </select>
+                  </label>
+
+                  @if (isMultiShapeMode()) {
+                    <div class="insp__field" data-testid="dining-shape-picker">
+                      <span class="insp__label">Shapes to use</span>
+                      <span class="insp__foot" style="display: block; margin-bottom: 0.35rem;">
+                        Tick every shape you want in this block. Each one gets its own measurements below.
+                      </span>
+                      <div style="display: flex; flex-direction: column; gap: 0.3rem;">
+                        @for (option of diningTableMixShapes; track option.shape) {
+                          <label class="insp__dining-features-check">
+                            <input
+                              type="checkbox"
+                              [attr.data-testid]="'dining-shape-check-' + option.shape"
+                              [checked]="isMixShapeSelected(option.shape)"
+                              (change)="toggleMixShape(option.shape)"
+                            />
+                            <span class="insp__dining-features-label">{{ option.label }}</span>
+                          </label>
+                        }
+                      </div>
+                    </div>
+                  }
+
+                  @if (!isMultiShapeMode() && draftTableShape() === 'round') {
+                    <label class="insp__field">
+                      <span class="insp__label">Table diameter (m)</span>
+                      <input
+                        class="insp__input"
+                        type="number"
+                        step="0.05"
+                        data-testid="dining-table-diameter-input"
+                        [attr.min]="minDraftTableSizeM"
+                        [attr.max]="maxDraftTableWidthM()"
+                        [value]="draftTableWidthM()"
+                        (input)="onDiningTableDiameterInput($event)"
+                        (blur)="onDiningTableDiameterBlur($event)"
+                      />
+                      <span class="insp__foot">
+                        Min {{ minDraftTableSizeM }} m · Max {{ maxDraftTableWidthM() }} m.
+                        @if (draftTableCount() > 1) {
+                          Growing this reduces table count.
+                        } @else {
+                          Growing this reduces chair depth until its minimum, then stops.
+                        }
+                      </span>
+                    </label>
+                  } @else if (!isMultiShapeMode()) {
+                    <div class="insp__row">
+                      <label class="insp__field">
+                        <span class="insp__label">Width (m)</span>
+                        <input
+                          class="insp__input"
+                          type="number"
+                          step="0.05"
+                          data-testid="dining-table-width-input"
+                          [attr.min]="minDraftTableSizeM"
+                          [attr.max]="maxDraftTableWidthM()"
+                          [value]="draftTableWidthM()"
+                          (input)="onDiningTableWidthInput($event)"
+                          (blur)="onDiningTableWidthBlur($event)"
+                        />
+                      </label>
+                      <label class="insp__field">
+                        <span class="insp__label">Depth (m)</span>
+                        <input
+                          class="insp__input"
+                          type="number"
+                          step="0.05"
+                          data-testid="dining-table-depth-input"
+                          [attr.min]="minDraftTableSizeM"
+                          [attr.max]="maxDraftTableDepthM()"
+                          [value]="draftTableDepthM()"
+                          (input)="onDiningTableDepthInput($event)"
+                          (blur)="onDiningTableDepthBlur($event)"
+                        />
+                      </label>
+                    </div>
+                    <span class="insp__foot">
+                      Min {{ minDraftTableSizeM }} m · Max {{ maxDraftTableWidthM() }} × {{ maxDraftTableDepthM() }} m.
+                      @if (draftTableCount() > 1) {
+                        Growing this reduces table count.
+                      } @else {
+                        Growing this reduces chair depth until its minimum, then stops.
+                      }
+                    </span>
+                  }
+
+                  <label class="insp__field">
+                    <span class="insp__label">Space between tables (m)</span>
+                    <input
+                      class="insp__input"
+                      type="number"
+                      min="0.1"
+                      step="0.05"
+                      data-testid="dining-table-gap-input"
+                      [attr.max]="maxDraftTableGapM()"
+                      [value]="draftTableGapM()"
+                      (input)="onDiningTableGapInput($event)"
+                      (blur)="onDiningTableGapBlur($event)"
+                    />
+                    <span class="insp__foot">Clear gap between dining units (table + chairs). Max {{ maxDraftTableGapM() }} m (room longest side). Minimum 0.1 m.</span>
+                  </label>
+
+                  <div class="insp__field" data-testid="dining-clearance-rules" style="margin-top: 0.35rem;">
+                    <span class="insp__label" style="display: block; margin-bottom: 0.35rem; font-weight: 700;">Keep-out clearances (m)</span>
+                    <span class="insp__foot" style="display: block; margin-bottom: 0.45rem;">
+                      Only features you enabled appear here. Lowering a keep-out frees space so capacity and suggested layouts can place more tables.
+                    </span>
+                    @if (isDraftDiningFeatureEnabled('stage') || isDraftDiningFeatureEnabled('foodprepare')) {
+                      <div class="insp__row" style="gap: 0.45rem;">
+                        @if (isDraftDiningFeatureEnabled('stage')) {
+                          <label class="insp__field">
+                            <span class="insp__label">Stage</span>
+                            <input
+                              class="insp__input"
+                              type="number"
+                              min="0"
+                              step="0.05"
+                              data-testid="dining-stage-clearance-input"
+                              [value]="draftStageClearanceM()"
+                              (input)="onDiningClearanceInput($event, 'stage')"
+                              (blur)="onDiningClearanceInput($event, 'stage')"
+                            />
+                          </label>
+                        }
+                        @if (isDraftDiningFeatureEnabled('foodprepare')) {
+                          <label class="insp__field">
+                            <span class="insp__label">Food Prep</span>
+                            <input
+                              class="insp__input"
+                              type="number"
+                              min="0"
+                              step="0.05"
+                              data-testid="dining-food-prep-clearance-input"
+                              [value]="draftFoodPrepClearanceM()"
+                              (input)="onDiningClearanceInput($event, 'foodPrep')"
+                              (blur)="onDiningClearanceInput($event, 'foodPrep')"
+                            />
+                          </label>
+                        }
+                      </div>
+                    }
+                    <div class="insp__row" style="gap: 0.45rem; margin-top: 0.35rem;">
+                      <label class="insp__field">
+                        <span class="insp__label">Entry / Exit</span>
+                        <input
+                          class="insp__input"
+                          type="number"
+                          min="0"
+                          step="0.05"
+                          data-testid="dining-access-clearance-input"
+                          [value]="draftAccessClearanceM()"
+                          (input)="onDiningClearanceInput($event, 'access')"
+                          (blur)="onDiningClearanceInput($event, 'access')"
+                        />
+                      </label>
+                      @if (isDraftDiningFeatureEnabled('serviceroute')) {
+                        <label class="insp__field">
+                          <span class="insp__label">Service route</span>
+                          <input
+                            class="insp__input"
+                            type="number"
+                            min="0"
+                            step="0.05"
+                            data-testid="dining-service-route-clearance-input"
+                            [value]="draftServiceRouteClearanceM()"
+                            (input)="onDiningClearanceInput($event, 'serviceRoute')"
+                            (blur)="onDiningClearanceInput($event, 'serviceRoute')"
+                          />
+                        </label>
+                      }
+                    </div>
+                    <label class="insp__field" style="margin-top: 0.35rem;">
+                      <span class="insp__label">Wall</span>
+                      <input
+                        class="insp__input"
+                        type="number"
+                        min="0"
+                        step="0.05"
+                        data-testid="dining-wall-clearance-input"
+                        [value]="draftWallClearanceM()"
+                        (input)="onDiningClearanceInput($event, 'wall')"
+                        (blur)="onDiningClearanceInput($event, 'wall')"
+                      />
+                      <span class="insp__foot">Minimum clear space from walls to dining units.</span>
+                    </label>
+                  </div>
+
+                  @if (isMultiShapeMode()) {
+                    <div class="insp__dining-shape-lanes" data-testid="dining-shape-lanes">
+                      @for (entry of draftTableMix(); track entry.shape) {
+                        @if (mixShapeCapacity(entry.shape); as lane) {
+                          <div
+                            class="insp__dining-shape-lane"
+                            [class.insp__dining-shape-lane--over]="lane.overBudget"
+                            [attr.data-testid]="'dining-shape-lane-' + entry.shape"
+                          >
+                            <div class="insp__dining-shape-lane__head">
+                              <span class="insp__dining-shape-lane__title">{{ diningShapeLabel(entry.shape) }} tables</span>
+                              <span class="insp__dining-shape-lane__badge">{{ lane.count }} × {{ entry.seats }} = {{ lane.seats }} seats</span>
+                            </div>
+
+                            @if (entry.shape === 'round') {
+                              <label class="insp__field">
+                                <span class="insp__label">Table diameter (m)</span>
+                                <input
+                                  class="insp__input"
+                                  type="number"
+                                  step="0.05"
+                                  [attr.min]="minDraftTableSizeM"
+                                  [attr.max]="lane.maxWidthM"
+                                  [value]="entry.widthM"
+                                  (change)="setMixDimension(entry.shape, 'widthM', $any($event.target).value)"
+                                />
+                                <span class="insp__foot">Min {{ minDraftTableSizeM }} m · Max {{ lane.maxWidthM }} m.</span>
+                              </label>
+                            } @else {
+                              <div class="insp__row">
+                                <label class="insp__field">
+                                  <span class="insp__label">Width (m)</span>
+                                  <input
+                                    class="insp__input"
+                                    type="number"
+                                    step="0.05"
+                                    [attr.min]="minDraftTableSizeM"
+                                    [attr.max]="lane.maxWidthM"
+                                    [value]="entry.widthM"
+                                    (change)="setMixDimension(entry.shape, 'widthM', $any($event.target).value)"
+                                  />
+                                </label>
+                                <label class="insp__field">
+                                  <span class="insp__label">Depth (m)</span>
+                                  <input
+                                    class="insp__input"
+                                    type="number"
+                                    step="0.05"
+                                    [attr.min]="minDraftTableSizeM"
+                                    [attr.max]="lane.maxDepthM"
+                                    [value]="entry.depthM"
+                                    (change)="setMixDimension(entry.shape, 'depthM', $any($event.target).value)"
+                                  />
+                                </label>
+                              </div>
+                              <span class="insp__foot">Max {{ lane.maxWidthM }} × {{ lane.maxDepthM }} m.</span>
+                            }
+
+                            <div class="insp__row">
+                              <label class="insp__field">
+                                <span class="insp__label">Chair width (m)</span>
+                                <input
+                                  class="insp__input"
+                                  type="number"
+                                  step="0.05"
+                                  [attr.min]="minDraftChairWidthM"
+                                  [value]="entry.chairWidthM"
+                                  (change)="setMixDimension(entry.shape, 'chairWidthM', $any($event.target).value)"
+                                />
+                              </label>
+                              <label class="insp__field">
+                                <span class="insp__label">Chair depth (m)</span>
+                                <input
+                                  class="insp__input"
+                                  type="number"
+                                  step="0.05"
+                                  [attr.min]="minDraftChairLengthM"
+                                  [attr.max]="lane.maxChairLengthM"
+                                  [value]="entry.chairLengthM"
+                                  (change)="setMixDimension(entry.shape, 'chairLengthM', $any($event.target).value)"
+                                />
+                              </label>
+                            </div>
+
+                            <label class="insp__field">
+                              <span class="insp__label">Chairs per table</span>
+                              <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
+                                <button type="button" class="insp__step" style="padding: 0.2rem 0.55rem;"
+                                  [disabled]="entry.seats <= 1" (click)="adjustMixSeats(entry.shape, -1)">−</button>
+                                <input
+                                  class="insp__input"
+                                  type="number"
+                                  style="width: 4rem; text-align: center; font-weight: 600;"
+                                  min="1"
+                                  [attr.max]="maxMixSeats(entry.shape)"
+                                  [value]="entry.seats"
+                                  (change)="setMixSeats(entry.shape, $any($event.target).value)"
+                                />
+                                <button type="button" class="insp__step" style="padding: 0.2rem 0.55rem;"
+                                  [disabled]="entry.seats >= maxMixSeats(entry.shape)" (click)="adjustMixSeats(entry.shape, 1)">+</button>
+                              </div>
+                              <span class="insp__foot">Maximum {{ maxMixSeats(entry.shape) }} chairs fit around this table.</span>
+                            </label>
+
+                            <label class="insp__field">
+                              <span class="insp__label">Table count</span>
+                              <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
+                                <button type="button" class="insp__step" style="padding: 0.2rem 0.55rem;"
+                                  [attr.data-testid]="'dining-shape-count-minus-' + entry.shape"
+                                  [disabled]="entry.count <= 0" (click)="adjustMixCount(entry.shape, -1)">−</button>
+                                <input
+                                  class="insp__input"
+                                  type="number"
+                                  style="width: 4rem; text-align: center; font-weight: 600;"
+                                  min="0"
+                                  [attr.data-testid]="'dining-shape-count-input-' + entry.shape"
+                                  [attr.max]="lane.maxCount"
+                                  [value]="entry.count"
+                                  (change)="setMixCount(entry.shape, $any($event.target).value)"
+                                />
+                                <button type="button" class="insp__step" style="padding: 0.2rem 0.55rem;"
+                                  [attr.data-testid]="'dining-shape-count-plus-' + entry.shape"
+                                  [disabled]="!canIncreaseMixCount(entry.shape)" (click)="adjustMixCount(entry.shape, 1)">+</button>
+                              </div>
+                              <span class="insp__foot" [attr.data-testid]="'dining-shape-max-' + entry.shape">
+                                Max {{ lane.maxCount }} while the other shapes stay as they are
+                                ({{ lane.soloMaxCount }} if this were the only shape).
+                                Lower another shape's count to raise this one.
+                              </span>
+                            </label>
+                          </div>
+                        }
+                      }
+                    </div>
+
+                    @if (diningTableMixCapacity(); as mix) {
+                      <p class="insp__foot" data-testid="dining-shape-mix-total" style="margin: 0.15rem 0 0;">
+                        Total {{ mix.totalCount }} tables · {{ mix.totalSeats }} seats ·
+                        {{ diningTableMixSpaceUsedPct() }}% of the block used.
+                      </p>
+                    }
+                    @if (diningTableMixError(); as mixErr) {
+                      <p class="insp__status insp__status--warn" data-testid="dining-shape-mix-error" style="margin-top: 0.35rem;">
+                        {{ mixErr }}
+                      </p>
+                    }
+                  } @else {
+                  <label class="insp__field">
+                    <span class="insp__label">Table count</span>
+                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
+                      <button type="button" class="insp__step" style="padding: 0.2rem 0.55rem;"
+                        data-testid="dining-table-count-minus"
+                        [disabled]="draftTableCount() <= 1" (click)="adjustDraftTableCount(-1)">−</button>
+                      <input
+                        class="insp__input"
+                        type="number"
+                        style="width: 4rem; text-align: center; font-weight: 600;"
+                        data-testid="dining-table-count-input"
+                        [ngModel]="draftTableCount()"
+                        (ngModelChange)="setDraftTableCount($event)"
+                        (blur)="capDraftTableCountToMax()"
+                        min="1"
+                        [attr.max]="effectiveMaximumTableCount()"
+                      />
+                      <button type="button" class="insp__step" style="padding: 0.2rem 0.55rem;"
+                        data-testid="dining-table-count-plus"
+                        [disabled]="!canIncreaseDraftTableCount()" (click)="adjustDraftTableCount(1)">+</button>
+                    </div>
+                    <span class="insp__foot" data-testid="dining-table-max-fill">
+                      Maximum that fits: {{ displayedMaximumThatFits() }}
+                      @if (operationalCapacityChecking()) {
+                        Checking available table capacity...
+                      } @else if (operationalMaximumKnown() && operationalMaximumDisplay() != null) {
+                        Operational maximum: {{ operationalMaximumDisplay() }} tables.
+                        Selected: {{ draftTableCount() }} of {{ effectiveMaximumTableCount() }}.
+                      } @else if (operationalCapacityStatus() === 'ready' && validatedFeasibleDisplay() != null) {
+                        Validated capacity: at least {{ validatedFeasibleDisplay() }} tables.
+                        Selected: {{ draftTableCount() }} of {{ effectiveMaximumTableCount() }}.
+                      } @else if (operationalCapacityStatus() === 'error') {
+                        Could not confirm operational capacity.
+                        @if (diningCapacityProbeError(); as capErr) {
+                          {{ capErr }}
+                        }
+                        Selected: {{ draftTableCount() }} of {{ displayedMaximumThatFits() }}.
+                        <button
+                          type="button"
+                          class="insp__dining-bg-warn-link"
+                          data-testid="dining-capacity-retry"
+                          (click)="retryOperationalCapacityProbe()"
+                        >Retry check</button>
+                      } @else {
+                        Checking available table capacity...
+                        Selected: {{ draftTableCount() }} of {{ displayedMaximumThatFits() }}.
+                      }
+                      @if (tableCountAdjustedMessage()) {
+                        {{ tableCountAdjustedMessage() }}
+                      }
+                      @if (selectedCountFeasibilityNote(); as note) {
+                        {{ note }}
+                      }
+                    </span>
+                    @if (showCapacityCandidateDebug && capacityPhysicalExplanation(); as expl) {
+                      <p class="insp__hint" style="margin-top: 0.35rem;" data-testid="dining-capacity-physical-debug">
+                        Tabletop {{ expl.tabletopDiameterM }}m · chair occupied {{ expl.chairOccupiedDiameterM }}m · required pitch {{ expl.requiredPitchM }}m
+                        · room {{ expl.roomWidthM }} × {{ expl.roomDepthM }}m
+                      </p>
+                    }
+                    @if (showCapacityCandidateDebug && capacityCandidateDebugSvg()) {
+                      <div class="insp__hint" style="margin-top: 0.45rem;" data-testid="dining-capacity-candidate-debug">
+                        Candidate pool (dev)
+                        <div [innerHTML]="capacityCandidateDebugSvg()"></div>
+                      </div>
+                    }
+                  </label>
+                  }
+                </div>
+              </div>
+
+              @if (!isMultiShapeMode()) {
+              <div class="insp__dining-divider">
+                <span class="insp__label" style="display: block; margin-bottom: 0.45rem; font-weight: 700;">Chair measurements</span>
+                <p class="insp__hint" style="margin: 0 0 0.55rem;">
+                  Count falls first as tables or chairs grow. After 1 table, growing diameter reduces chair depth (and the reverse) until each field hits its practical minimum — then it stops.
+                </p>
+                <div class="insp__row">
+                  <label class="insp__field">
+                    <span class="insp__label">Chair width (m)</span>
+                    <input
+                      class="insp__input"
+                      type="number"
+                      step="0.05"
+                      data-testid="dining-chair-width-input"
+                      [attr.min]="minDraftChairWidthM"
+                      [attr.max]="maxDraftChairWidthM()"
+                      [value]="draftChairWidth()"
+                      (input)="onDiningChairWidthInput($event)"
+                      (blur)="onDiningChairWidthBlur($event)"
+                    />
+                    <span class="insp__foot">Min {{ minDraftChairWidthM }} m · Max {{ maxDraftChairWidthM() }} m.</span>
+                  </label>
+                  <label class="insp__field">
+                    <span class="insp__label">Chair depth (m)</span>
+                    <input
+                      class="insp__input"
+                      type="number"
+                      step="0.05"
+                      data-testid="dining-chair-depth-input"
+                      [attr.min]="minDraftChairLengthM"
+                      [attr.max]="maxDraftChairLengthM()"
+                      [value]="draftChairLength()"
+                      (input)="onDiningChairDepthInput($event)"
+                      (blur)="onDiningChairDepthBlur($event)"
+                    />
+                    <span class="insp__foot">
+                      Min {{ minDraftChairLengthM }} m · Max {{ maxDraftChairLengthM() }} m.
+                      @if (draftTableCount() > 1) {
+                        Growing this reduces table count.
+                      } @else {
+                        Growing this reduces table size until its minimum, then stops.
+                      }
+                    </span>
+                  </label>
+                </div>
+                <label class="insp__field">
+                  <span class="insp__label">Chairs per table</span>
+                  <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
+                    <button type="button" class="insp__step" style="padding: 0.2rem 0.55rem;"
+                      [disabled]="draftTableSeats() <= 1" (click)="adjustDraftTableSeats(-1)">−</button>
+                    <input
+                      class="insp__input"
+                      type="number"
+                      style="width: 4rem; text-align: center; font-weight: 600;"
+                      [ngModel]="draftTableSeats()"
+                      (ngModelChange)="setDraftTableSeats($event)"
+                      (blur)="capDraftTableSeatsToMax()"
+                      min="1"
+                      [attr.max]="maxDraftTableSeats()"
+                    />
+                    <button type="button" class="insp__step" style="padding: 0.2rem 0.55rem;"
+                      [disabled]="draftTableSeats() >= maxDraftTableSeats()" (click)="adjustDraftTableSeats(1)">+</button>
+                  </div>
+                  <span class="insp__foot">Maximum {{ maxDraftTableSeats() }} chairs can fit around this table.</span>
+                </label>
+              </div>
+              }
+
+              @if (!isMultiShapeMode()) {
+              <div class="insp__dining-divider">
+                <span class="insp__label" style="display: block; margin-bottom: 0.35rem; font-weight: 700;">Save as table category</span>
+                <p class="insp__hint" style="margin: 0 0 0.45rem; font-size: 0.72rem;">
+                  Save all table and chair measurements above as a reusable category preset.
+                </p>
+                <label class="insp__field" style="margin-bottom: 0.45rem;">
+                  <span class="insp__label">Category name</span>
+                  <input
+                    class="insp__input"
+                    type="text"
+                    placeholder="e.g. Banquet round 8-seat"
+                    [ngModel]="tableCategorySaveName()"
+                    (ngModelChange)="tableCategorySaveName.set($event)"
+                  />
+                </label>
+                <button type="button" class="insp__btn insp__btn--primary insp__btn--block" (click)="saveTableCategory()">Save category</button>
+                @if (tableCategoryError(); as catErr) {
+                  <p class="insp__status insp__status--warn" style="margin-top: 0.35rem;">{{ catErr }}</p>
+                }
+              </div>
+              }
+            </div>
+
+            <div class="insp__btn-row" style="margin-top: 0.75rem;">
+              <button type="button" class="insp__btn insp__btn--ghost" (click)="goToStep(3)">Back</button>
+              <button type="button" class="insp__btn insp__btn--ghost" (click)="cancelTableCreateWizard()">Cancel</button>
+              <button
+                type="button"
+                class="insp__btn insp__btn--primary"
+                style="flex: 1;"
+                [disabled]="!canContinueFromTableMeasurements()"
+                data-testid="dining-continue-step-5"
+                (click)="goToStep(5)"
+              >{{ tableCountContinueLabel() }}</button>
+            </div>
+            @if (diningCapacityProbeError(); as capErr) {
+              <p class="insp__status insp__status--warn" style="margin-top: 0.45rem;" data-testid="dining-capacity-error">
+                {{ capErr }}
+              </p>
+            }
+          }
+
+          <!-- ── STEP 5: Generate Layout ── -->
+          @if (diningWizardStep() === 5) {
+            @if (tableGridWizardError(); as err) {
+              <p class="insp__status insp__status--warn" style="margin-bottom: 0.5rem;">{{ err }}</p>
+              @if (!templatesGenerated()) {
+                <p class="insp__hint" style="margin-bottom: 0.5rem;">Try adjusting capacity, table size or spacing.</p>
+              }
+              <button
+                type="button"
+                class="insp__btn insp__btn--ghost insp__btn--block"
+                style="margin-bottom: 0.65rem;"
+                [disabled]="diningSuggestionLoading()"
+                (click)="retryDiningDesigns()"
+              >
+                Retry
+              </button>
+            }
+            @if (diningSuggestionLoading() && !templatesGenerated()) {
+              <p class="insp__hint">Generating layouts under current rules…</p>
+            } @else if (templatesGenerated()) {
+              <p class="insp__section-title" style="margin-bottom: 0.35rem;">Suggested Designs</p>
+              @if (diningGenerationHint(); as genHint) {
+                <p class="insp__status insp__status--warn" style="margin-bottom: 0.45rem;">{{ genHint }}</p>
+              }
+              @if (replacingFixedLayout()) {
+                <p class="insp__hint" style="margin-bottom: 0.35rem; font-size: 0.78rem;">
+                  Click another pattern to preview, then <strong>Fix Layout</strong> to replace the current one.
+                </p>
+              }
+              <p class="insp__hint" style="margin-bottom: 0.5rem; font-size: 0.78rem;">
+                Click any card to preview on the canvas, then <strong>Fix Layout</strong> to keep it.
+              </p>
+              @if (visibleTemplates().length === 1) {
+                <p class="insp__hint" data-testid="dining-single-layout-note">
+                  1 distinct valid layout found for the current constraints.
+                </p>
+              }
+              @if (diningSuggestionLoading()) {
+                <p class="insp__hint" style="margin-bottom: 0.45rem;">Generating new designs…</p>
+              }
+
+              <div style="display: flex; flex-direction: column; gap: 0.5rem; max-height: none; overflow: visible;">
+                @for (tmpl of visibleTemplates(); track tmpl.id) {
+                  <button
+                    type="button"
+                    class="insp__dining-tmpl-card"
+                    [class.insp__dining-tmpl-card--active]="selectedPreviewTemplateId() === tmpl.id"
+                    (click)="previewDiningTemplate(tmpl.id)"
+                    style="text-align: left; width: 100%; border-radius: 8px; padding: 0.5rem;"
+                  >
+                    <div class="insp__dining-tmpl-preview" [innerHTML]="layoutPreviewSvg(tmpl.previewSvg)"></div>
+                    <div class="insp__dining-tmpl-meta">
+                      <div class="insp__dining-tmpl-meta-left">
+                        <span class="insp__dining-tmpl-icon">{{ tmpl.icon }}</span>
+                        <span class="insp__dining-tmpl-name">{{ tmpl.name }}</span>
+                      </div>
+                      <div class="insp__dining-tmpl-stats">
+                        @if (tmpl.score != null) {
+                          <span class="insp__dining-tmpl-stat">Score {{ tmpl.score }}</span>
+                        }
+                        <span class="insp__dining-tmpl-stat">{{ tmpl.tableCount }} tables</span>
+                        <span class="insp__dining-tmpl-stat insp__dining-tmpl-stat--muted">{{ tmpl.totalSeats }} seats</span>
+                      </div>
+                    </div>
+                    @if (tmpl.metrics; as m) {
+                      <div class="insp__dining-tmpl-metrics">
+                        <span>Guest Flow {{ metricQuality(m.guestFlow) }}</span>
+                        <span>Service {{ metricQuality(m.serviceEfficiency) }}</span>
+                        <span>Stage {{ metricQuality(m.stageOrientation) }}</span>
+                      </div>
+                    }
+                  </button>
+                }
+              </div>
+
+              <button
+                type="button"
+                class="insp__btn insp__btn--ghost insp__btn--block"
+                style="margin-top: 0.55rem;"
+                [disabled]="diningSuggestionLoading()"
+                (click)="refreshDiningDesigns()"
+              >
+                Refresh table layouts
+              </button>
+              <p class="insp__hint" style="margin: 0 0 0.35rem; font-size: 0.72rem;">
+                Keeps your Stage and Food Prep where you placed them.
+              </p>
+
+              <button
+                type="button"
+                class="insp__btn insp__btn--ghost insp__btn--block"
+                style="margin-bottom: 0.55rem;"
+                [disabled]="diningSuggestionLoading()"
+                (click)="redesignDiningLayout()"
+              >
+                Redesign
+              </button>
+              <p class="insp__hint" style="margin: -0.35rem 0 0.55rem; font-size: 0.72rem;">
+                Recalculates table arrangements in the remaining space. Stage, Food Prep, and access points stay anchored.
+              </p>
+
+              <button
+                type="button"
+                class="insp__btn insp__btn--primary insp__btn--block"
+                style="margin-top: 0.5rem;"
+                [disabled]="!selectedPreviewTemplateId()"
+                (click)="fixDiningLayout()"
+              >
+                Fix Layout
+              </button>
+            } @else if (!tableGridWizardError()) {
+              <p class="insp__hint">Ready to generate layouts for this block.</p>
+              <button type="button" class="insp__btn insp__btn--primary insp__btn--block" (click)="generateDiningTemplates()">
+                Generate Layout
+              </button>
+            }
+
+            <div class="insp__btn-row" style="margin-top: 0.5rem;">
+              @if (replacingFixedLayout()) {
+                <button type="button" class="insp__btn insp__btn--ghost" style="flex: 1;" (click)="cancelTableCreateWizard()">Cancel</button>
+              } @else {
+                <button type="button" class="insp__btn insp__btn--ghost" (click)="goToStep(4)">Back</button>
+                <button type="button" class="insp__btn insp__btn--ghost" style="flex: 1;" (click)="cancelTableCreateWizard()">Cancel</button>
+              }
+            </div>
+          }
+          }
+        </section>
+      }
+
+      @if (isDiningFeatureEnabled('serviceroute')) {
+        <section class="insp__section">
+          <h3 class="insp__section-title">Service routes</h3>
+          @if (isServiceRouteDrawing()) {
+            <p class="insp__hint">
+              Click inside the block to trace a service path. Double-click or Enter to finish (minimum 2 points).
+            </p>
+            <p class="insp__status">
+              {{ serviceRouteDraftCount() }} point{{ serviceRouteDraftCount() === 1 ? '' : 's' }} placed
+            </p>
+            <div class="insp__btn-row">
+              <button
+                type="button"
+                class="insp__btn insp__btn--primary"
+                [disabled]="serviceRouteDraftCount() < 2"
+                (click)="finishServiceRouteDrawing()"
+              >Finish route</button>
+              <button type="button" class="insp__btn insp__btn--ghost" (click)="cancelServiceRouteDrawing()">Cancel</button>
+            </div>
+          } @else {
+            <p class="insp__hint">
+              Draw walkways for staff between tables. Routes are saved with the block configuration.
+            </p>
+            @if (diningServiceRouteCount() > 0) {
+              <p class="insp__status">
+                {{ diningServiceRouteCount() }} route{{ diningServiceRouteCount() === 1 ? '' : 's' }} on block
+                @if (selectedServiceRouteId()) {
+                  · one selected
+                }
+              </p>
+            }
+            <button
+              type="button"
+              class="insp__btn insp__btn--primary insp__btn--block"
+              [disabled]="stageSidePickActive()"
+              (click)="startServiceRouteDrawing()"
+            >
+              Draw service route
+            </button>
+            @if (selectedServiceRoute(); as route) {
+              <div class="insp__nested" style="margin-top: 0.6rem;">
+                <span class="insp__label" style="font-weight: 700; color: #0d9488; text-transform: uppercase; font-size: 0.65rem;">Selected route</span>
+                <p class="insp__status" style="margin: 0.35rem 0 0.5rem;">{{ route.label }}</p>
+
+                <label class="insp__field">
+                  <span class="insp__label">Width / Space (m)</span>
+                  <input
+                    class="insp__input"
+                    type="number"
+                    min="0.1"
+                    step="0.1"
+                    [ngModel]="route.widthM ?? 1.0"
+                    (ngModelChange)="updateSelectedServiceRouteWidth(num($event))"
+                  />
+                  <span class="insp__foot">Space measurement / width of this service route.</span>
+                </label>
+
+                <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" style="margin-top: 0.5rem;" (click)="deleteSelectedServiceRoute()">
+                  Delete route
+                </button>
+              </div>
+            }
+            @if (diningServiceRouteCount() > 0) {
+              <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="removeAllServiceRoutes()">
+                Remove all routes
+              </button>
+            }
+          }
+        </section>
+      }
+    }
+
+    @if (!isDrawing() && !isCustom()) {
+      <label class="insp__field">
+        <span class="insp__label">Shape</span>
+        <select class="insp__input" [ngModel]="c.shape" (ngModelChange)="patch({ shape: $event })">
+          @for (s of shapes; track s.id) {
+            <option [value]="s.id">{{ s.label }}</option>
+          }
+        </select>
+      </label>
+      @if (c.shape === 'rectangle' || c.shape === 'square') {
+        <label class="insp__field">
+          <span class="insp__label">Curve ({{ c.curveDeg }}°)</span>
+          <input class="insp__range" type="range" min="-60" max="60" step="1" [ngModel]="c.curveDeg" (ngModelChange)="patch({ curveDeg: num($event) })" />
+        </label>
+      }
+    }
+  }
+
+  @if (selectedCount() > 1) {
+    <section class="insp__section">
+      <p class="insp__hint">
+        {{ selectedCount() }} elements are selected. Drag on empty canvas to change the selection, or press Delete to remove them all.
+      </p>
+    </section>
+  }
+
+  @if (selectedCount() === 1 && selected(); as el) {
+    @if (variant() === 'full' || variant() === 'block-workspace') {
+
+    @if (variant() === 'block-workspace' && selectedTable(); as table) {
+      @if (canEditSelectedTableChairs()) {
+        <section class="insp__section">
+          <h3 class="insp__section-title">Selected table</h3>
+          @if (tableGapRuleAlert(); as gapAlert) {
+            <div class="insp__inline-alert insp__inline-alert--warn" style="margin-bottom: 0.65rem;">
+              <span class="insp__inline-alert__title">Table gap rule</span>
+              <p class="insp__inline-alert__text">{{ gapAlert }}</p>
+              <button
+                type="button"
+                class="insp__btn insp__btn--ghost insp__btn--block insp__inline-alert__btn"
+                (click)="dismissTableGapRuleAlert()"
+              >OK</button>
+            </div>
+          }
+          <p class="insp__status" style="margin: 0 0 0.5rem;">{{ table.label }} · {{ table.seats }} seat{{ table.seats === 1 ? '' : 's' }}</p>
+          <p class="insp__foot" style="margin: 0 0 0.5rem;">Min table gap rule: {{ currentTableGapRuleM() }} m</p>
+
+          <label class="insp__field">
+            <span class="insp__label">Access category</span>
+            <select class="insp__input" [ngModel]="table.accessCategory ?? ''" (ngModelChange)="updateSelectedTableAccessCategory($event)">
+              <option value="">Not set</option>
+              <option value="private">Private</option>
+              <option value="public">Public</option>
+              <option value="shared">Shared</option>
+              <option value="vip">VIP</option>
+            </select>
+          </label>
+
+          <label class="insp__field">
+            <span class="insp__label">Shape</span>
+            <select class="insp__input" [ngModel]="table.shape" (ngModelChange)="updateSelectedTableShape($event)">
+              <option value="round">Round</option>
+              <option value="rectangular">Rectangular</option>
+            </select>
+          </label>
+
+          <div class="insp__rowcard" style="margin-top: 0.35rem;">
+            <span class="insp__rowtag">Chairs</span>
+            <div class="insp__stepper">
+              <button type="button" class="insp__step" [disabled]="table.seats <= 1" (click)="updateSelectedTableSeats(table.seats - 1)">−</button>
+              <span class="insp__step-val">{{ table.seats }}</span>
+              <button type="button" class="insp__step" [disabled]="table.seats >= maxSelectedTableSeats()" (click)="updateSelectedTableSeats(table.seats + 1)">+</button>
+            </div>
+          </div>
+          <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" style="margin-top: 0.5rem;" (click)="deleteSelectedTable()">Delete table</button>
+        </section>
+      }
+    }
+
+    @if (variant() === 'block-workspace' && seatSpacingBlock()) {
+      <section class="insp__section insp__gaps">
+        <h3 class="insp__section-title">Row &amp; seat gaps</h3>
+
+        @if (seatSpacingRow(); as row) {
+          <div class="insp__gaps-target">
+            <span class="insp__rowtag">Row {{ row.label }}</span>
+            <span class="insp__foot">Click another row letter on the canvas to switch.</span>
+          </div>
+          @if (row.prevLabel !== null) {
+            <div class="insp__gaps-card">
+              <span class="insp__label">Gap before row {{ row.label }}</span>
+              <span class="insp__foot">Between row {{ row.prevLabel }} and row {{ row.label }} · default {{ formatMetres(row.defaultGapM) }} m</span>
+              <div class="insp__gaps-scope" role="group" aria-label="Apply row gap to">
+                <button type="button" class="insp__gaps-scope-btn" [class.insp__gaps-scope-btn--on]="seatRowGapScope() === 'row'" (click)="seatRowGapScope.set('row')">Only {{ row.prevLabel }} ↔ {{ row.label }}</button>
+                <button type="button" class="insp__gaps-scope-btn" [class.insp__gaps-scope-btn--on]="seatRowGapScope() === 'all'" (click)="seatRowGapScope.set('all')">All row gaps</button>
+              </div>
+              <div class="insp__gaps-editor">
+                <button type="button" class="insp__step" [disabled]="row.gapM <= 0" (click)="stepSeatRowGap(-1)" aria-label="Narrow gap">−</button>
+                <input
+                  class="insp__input insp__gaps-input"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  [value]="row.gapM"
+                  (change)="commitSeatRowGap($any($event.target).value)"
+                  (keydown.enter)="$any($event.target).blur()"
+                />
+                <span class="insp__gaps-unit">m</span>
+                <button type="button" class="insp__step" (click)="stepSeatRowGap(1)" aria-label="Widen gap">+</button>
+              </div>
+              <span class="insp__foot">
+                @if (seatRowGapScope() === 'all') {
+                  Every row gap in the block takes this value; rows spread out from row A.
+                } @else {
+                  Rows {{ row.label }} and behind move back together; the rows in front stay put.
+                }
+              </span>
+            </div>
+          } @else {
+            <p class="insp__hint">Row {{ row.label }} is the front row (VIEW POINT side). Select row {{ row.label === 'A' ? 'B' : 'behind it' }} to set the gap in front of it.</p>
+          }
+          <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="resetSeatRowSpacing()">Reset gaps in row {{ row.label }}</button>
+        } @else if (seatSpacingSeat(); as seat) {
+          <div class="insp__gaps-target">
+            <span class="insp__rowtag">Seat {{ seat.seatId }}</span>
+            <span class="insp__foot">Row {{ seat.rowLabel }} · seat {{ seat.number }}</span>
+          </div>
+          @if (seat.hasNext) {
+            <div class="insp__gaps-card">
+              <span class="insp__label">Gap after seat {{ seat.number }}</span>
+              <span class="insp__foot">Between seat {{ seat.number }} and seat {{ seat.number + 1 }} · default {{ formatMetres(seat.defaultGapM) }} m</span>
+              <div class="insp__gaps-scope" role="group" aria-label="Apply seat gap to">
+                <button type="button" class="insp__gaps-scope-btn" [class.insp__gaps-scope-btn--on]="seatPairGapScope() === 'pair'" (click)="seatPairGapScope.set('pair')">Only {{ seat.number }} ↔ {{ seat.number + 1 }}</button>
+                <button type="button" class="insp__gaps-scope-btn" [class.insp__gaps-scope-btn--on]="seatPairGapScope() === 'row'" (click)="seatPairGapScope.set('row')">Whole row {{ seat.rowLabel }}</button>
+                <button type="button" class="insp__gaps-scope-btn" [class.insp__gaps-scope-btn--on]="seatPairGapScope() === 'all'" (click)="seatPairGapScope.set('all')">All rows</button>
+              </div>
+              <div class="insp__gaps-editor">
+                <button type="button" class="insp__step" [disabled]="seat.gapM <= 0" (click)="stepSeatPairGap(-1)" aria-label="Narrow gap">−</button>
+                <input
+                  class="insp__input insp__gaps-input"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  [value]="seat.gapM"
+                  (change)="commitSeatPairGap($any($event.target).value)"
+                  (keydown.enter)="$any($event.target).blur()"
+                />
+                <span class="insp__gaps-unit">m</span>
+                <button type="button" class="insp__step" (click)="stepSeatPairGap(1)" aria-label="Widen gap">+</button>
+              </div>
+              <span class="insp__foot">
+                @if (seatPairGapScope() === 'pair') {
+                  Seats {{ seat.number + 1 }}+ slide along the row.
+                } @else if (seatPairGapScope() === 'row') {
+                  Every gap in row {{ seat.rowLabel }} takes this value; seats spread out from seat 1.
+                } @else {
+                  Every seat gap in the block takes this value; each row spreads out from seat 1.
+                }
+                Aisles stay clear — a chair that would land in one is carried past it. A chair that no longer fits inside the outline is hidden until the gap shrinks again.
+              </span>
+            </div>
+          } @else {
+            <p class="insp__hint">Seat {{ seat.number }} is the last chair in row {{ seat.rowLabel }}. Select an earlier chair to change the gap after it.</p>
+          }
+          <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="deleteSelectedSeat()">Delete seat</button>
+        } @else {
+          <p class="insp__hint">
+            Click a <strong>row letter</strong> to set the gap in front of that row, or click a <strong>chair</strong> to set the gap after it. Each gap can differ from the block default.
+          </p>
+        }
+
+        @if (seatSpacingHiddenCount() > 0) {
+          <p class="insp__status insp__status--warn" style="margin-top: 0.5rem;">
+            {{ seatSpacingHiddenCount() }} seat{{ seatSpacingHiddenCount() === 1 ? '' : 's' }} hidden — pushed outside the outline by a custom gap. Shrink that gap to bring {{ seatSpacingHiddenCount() === 1 ? 'it' : 'them' }} back.
+          </p>
+        }
+        @if (seatSpacingHasAdjustments()) {
+          <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" style="margin-top: 0.5rem;" (click)="resetAllSeatSpacing()">Reset all custom gaps</button>
+        }
+      </section>
+    }
+
+    <label class="insp__field">
+      <span class="insp__label">Element name</span>
+      <input class="insp__input" type="text" [ngModel]="el.name" (ngModelChange)="patch({ name: $event })" />
+      <span class="insp__foot">Used only inside the designer layer list.</span>
+    </label>
+
+    @if (center(); as c) {
+      <section class="insp__section">
+        <h3 class="insp__section-title">Label</h3>
+        <label class="insp__field">
+          <span class="insp__label">Label text</span>
+          <input class="insp__input" type="text" placeholder="GROUND / STAGE / SCREEN / …" [ngModel]="c.label" (ngModelChange)="patch({ label: $event })" />
+        </label>
+        <label class="insp__field">
+          <span class="insp__label">Label font size (auto)</span>
+          <input class="insp__input" type="number" min="8" max="400" [ngModel]="autoLabelSize()" readonly />
+          <span class="insp__foot">Auto from shape size ({{ autoLabelSize() }}px on canvas). Change the value to lock a fixed size.</span>
+        </label>
+      </section>
+    }
+
+    @if (!isDrawing()) {
+      <section class="insp__section">
+        <h3 class="insp__section-title">Position &amp; size</h3>
+        <div class="insp__row">
+          <label class="insp__field">
+            <span class="insp__label">X %</span>
+            <input class="insp__input" type="number" step="0.01" [ngModel]="el.position.xPct" (ngModelChange)="patch({ position: { xPct: num($event), yPct: el.position.yPct } })" />
+          </label>
+          <label class="insp__field">
+            <span class="insp__label">Y %</span>
+            <input class="insp__input" type="number" step="0.01" [ngModel]="el.position.yPct" (ngModelChange)="patch({ position: { xPct: el.position.xPct, yPct: num($event) } })" />
+          </label>
+        </div>
+        <div class="insp__row">
+          <label class="insp__field">
+            <span class="insp__label">Width %</span>
+            <input class="insp__input" type="number" step="0.01" [ngModel]="el.size.wPct" (ngModelChange)="patch({ size: { wPct: num($event), hPct: el.size.hPct } })" />
+          </label>
+          <label class="insp__field">
+            <span class="insp__label">Height %</span>
+            <input class="insp__input" type="number" step="0.01" [ngModel]="el.size.hPct" (ngModelChange)="patch({ size: { wPct: el.size.wPct, hPct: num($event) } })" />
+          </label>
+        </div>
+        <label class="insp__field">
+          <span class="insp__label">Rotation °</span>
+          <input class="insp__input" type="number" step="1" [ngModel]="el.rotation" (ngModelChange)="patch({ rotation: num($event) })" />
+        </label>
+      </section>
+    }
+
+    <!-- Block Grid -->
+    @if (grid(); as g) {
+      <label class="insp__field">
+        <span class="insp__label">Label</span>
+        <input class="insp__input" type="text" [ngModel]="g.label" (ngModelChange)="patch({ label: $event })" />
+      </label>
+      <div class="insp__row">
+        <label class="insp__field">
+          <span class="insp__label">Rows</span>
+          <input class="insp__input" type="number" min="1" max="100" [ngModel]="g.rows" (ngModelChange)="patch({ rows: num($event) })" />
+        </label>
+        <label class="insp__field">
+          <span class="insp__label">Seats/row</span>
+          <input class="insp__input" type="number" min="1" max="200" [ngModel]="g.seatsPerRow" (ngModelChange)="patch({ seatsPerRow: num($event) })" />
+        </label>
+      </div>
+      <label class="insp__field">
+        <span class="insp__label">Row labels</span>
+        <select class="insp__input" [ngModel]="g.rowLabelStyle" (ngModelChange)="patch({ rowLabelStyle: $event })">
+          <option value="letter">A, B, C…</option>
+          <option value="number">1, 2, 3…</option>
+        </select>
+      </label>
+    }
+
+    @if (section(); as s) {
+      <label class="insp__field">
+        <span class="insp__label">Label</span>
+        <input class="insp__input" type="text" [ngModel]="s.label" (ngModelChange)="patch({ label: $event })" />
+      </label>
+      <label class="insp__field">
+        <span class="insp__label">Row gap ({{ s.rowGapPct }})</span>
+        <input class="insp__range" type="range" min="2" max="24" step="1" [ngModel]="s.rowGapPct" (ngModelChange)="patch({ rowGapPct: num($event) })" />
+      </label>
+      <label class="insp__check">
+        <input type="checkbox" [ngModel]="s.showRowLabels" (ngModelChange)="patch({ showRowLabels: $event })" />
+        <span>Show row labels</span>
+      </label>
+      <div class="insp__subhead">
+        <span>Rows ({{ s.rows.length }})</span>
+        <button type="button" class="insp__mini" (click)="addSeatRow()">+ Add</button>
+      </div>
+      @for (row of s.rows; track row.id; let i = $index) {
+        <div class="insp__rowcard">
+          <span class="insp__rowtag">{{ i + 1 }}</span>
+          <label class="insp__field insp__field--tiny">
+            <span class="insp__label">Seats</span>
+            <input class="insp__input" type="number" min="0" max="100" [ngModel]="row.seatCount" (ngModelChange)="updateSeatRow(row.id, { seatCount: num($event) })" />
+          </label>
+          <label class="insp__field insp__field--tiny">
+            <span class="insp__label">Curve</span>
+            <input class="insp__input" type="number" min="-24" max="24" [ngModel]="row.curveDeg" (ngModelChange)="updateSeatRow(row.id, { curveDeg: num($event) })" />
+          </label>
+          <button type="button" class="insp__rowdel" (click)="removeSeatRow(row.id)">×</button>
+        </div>
+      }
+    }
+
+    @if (ring(); as r) {
+      <section class="insp__section">
+        <div class="insp__section-head">
+          <h3 class="insp__section-title">Ring anchor</h3>
+          <span class="insp__badge">{{ ringTotalSeats() }} seats</span>
+        </div>
+        <label class="insp__field">
+          <span class="insp__label">Anchor centerpiece</span>
+          <select
+            class="insp__input"
+            [ngModel]="r.centerpieceId ?? ''"
+            (ngModelChange)="patch({ centerpieceId: $event || undefined })"
+          >
+            <option value="">
+              {{ centerpieces().length ? 'None — select a centerpiece' : 'No centerpiece available — add one first' }}
+            </option>
+            @for (cp of centerpieces(); track cp.id) {
+              <option [value]="cp.id">{{ centerpieceLabel(cp.id) }}</option>
+            }
+          </select>
+          <span class="insp__foot">Ring is drawn around the chosen centerpiece when one is set.</span>
+        </label>
+        <label class="insp__field">
+          <span class="insp__label">Ring thickness ({{ r.thicknessPct }}%)</span>
+          <input class="insp__range" type="range" min="1" max="20" step="0.5" [ngModel]="r.thicknessPct" (ngModelChange)="patch({ thicknessPct: num($event) })" />
+        </label>
+        <label class="insp__field">
+          <span class="insp__label">Gap from centerpiece ({{ ringGapPct() }}%)</span>
+          <input class="insp__range" type="range" min="0" max="20" step="0.5" [ngModel]="ringGapPct()" (ngModelChange)="patch({ gapPct: num($event) })" />
+        </label>
+      </section>
+
+      @if (selectedSector(); as block) {
+        <section class="insp__section insp__section--highlight">
+          <div class="insp__section-head">
+            <h3 class="insp__section-title">Selected sector — {{ block.code }}</h3>
+            <span class="insp__badge insp__badge--blue">{{ sectorSeatTotal(block) }} seats</span>
+          </div>
+          <p class="insp__hint">Selected from the canvas. Drag the sector to reposition it along the ring.</p>
+          <label class="insp__field">
+            <span class="insp__label">Display label</span>
+            <input class="insp__input" type="text" [ngModel]="block.label ?? ''" (ngModelChange)="updateSectorBlock(block.id, { label: $event || undefined })" [placeholder]="block.code" />
+          </label>
+          <label class="insp__color-row">
+            <span class="insp__label">Block color</span>
+            <div class="insp__color-input">
+              <input type="color" [ngModel]="block.fillColor ?? defaultSectorFill()" (ngModelChange)="setSectorBlockColor(block.id, $event)" />
+              <input class="insp__input" type="text" [ngModel]="block.fillColor ?? defaultSectorFill()" (ngModelChange)="setSectorBlockColor(block.id, $event)" />
+            </div>
+            <span class="insp__foot">Overrides the ring default fill for this sector only.</span>
+          </label>
+          <app-sector-block-seat-panel
+            [block]="block"
+            [ringRowLabelStyle]="r.rowLabelStyle"
+            (blockChange)="updateSectorBlock(block.id, $event)"
+          />
+          <details class="insp__details">
+            <summary class="insp__details-summary">Advanced — angles</summary>
+            <div class="insp__row insp__row--spaced">
+              <label class="insp__field">
+                <span class="insp__label">Start angle °</span>
+                <input class="insp__input" type="number" step="0.5" [ngModel]="block.startAngleDeg" (ngModelChange)="updateSectorBlock(block.id, { startAngleDeg: num($event) })" />
+              </label>
+              <label class="insp__field">
+                <span class="insp__label">End angle °</span>
+                <input class="insp__input" type="number" step="0.5" [ngModel]="block.endAngleDeg" (ngModelChange)="updateSectorBlock(block.id, { endAngleDeg: num($event) })" />
+              </label>
+            </div>
+          </details>
+        </section>
+      }
+
+      <section class="insp__section">
+        <h3 class="insp__section-title">{{ selectedSector() ? 'All sectors' : 'Blocks (sectors)' }}</h3>
+        <p class="insp__hint">
+          {{ selectedSector()
+            ? 'Need to adjust the full ring or switch to another sector? Use the list below.'
+            : 'Click any sector on the canvas to focus that single block for customization.' }}
+        </p>
+        <div class="insp__row insp__row--align-end">
+          <label class="insp__field insp__field--grow">
+            <span class="insp__label">Total blocks</span>
+            <input class="insp__input" type="number" min="1" max="24" [ngModel]="r.blocks.length" (ngModelChange)="setSectorCount(num($event))" />
+          </label>
+          <button type="button" class="insp__mini insp__mini--pad" (click)="redistributeRingBlocks()" [disabled]="r.blocks.length < 2">Redistribute</button>
+        </div>
+        @if (!selectedSector()) {
+          <div class="insp__row">
+            <label class="insp__field">
+              <span class="insp__label">Rows / sector (all)</span>
+              <input class="insp__input" type="number" min="0" max="40" [ngModel]="ringRows()" (ngModelChange)="setRingSeats(num($event), ringSeats())" />
+            </label>
+            <label class="insp__field">
+              <span class="insp__label">Seats / row (all)</span>
+              <input class="insp__input" type="number" min="0" max="80" [ngModel]="ringSeats()" (ngModelChange)="setRingSeats(ringRows(), num($event))" />
+            </label>
+          </div>
+        }
+
+        <div class="insp__blocklist">
+          @for (block of r.blocks; track block.id; let i = $index) {
+            <div
+              class="insp__blockcard"
+              [class.insp__blockcard--active]="isSectorSelected(block.id)"
+            >
+              <div class="insp__blockcard-head" (click)="selectSectorBlock(block.id)">
+                <button
+                  type="button"
+                  class="insp__chevron"
+                  [class.insp__chevron--open]="isSectorExpanded(block.id)"
+                  (click)="toggleSectorExpanded(block.id); $event.stopPropagation()"
+                  [attr.aria-label]="isSectorExpanded(block.id) ? 'Collapse block' : 'Expand block'"
+                >
+                  ›
+                </button>
+                <span class="insp__rowtag">#{{ i + 1 }}</span>
+                <input
+                  class="insp__blockcode"
+                  type="text"
+                  [ngModel]="block.code"
+                  (click)="$event.stopPropagation()"
+                  (ngModelChange)="updateSectorBlock(block.id, { code: $event.toUpperCase() })"
+                  aria-label="Block code"
+                />
+                <span class="insp__blockseats">{{ sectorSeatTotal(block) }} seats</span>
+                @if (isSectorSelected(block.id)) {
+                  <span class="insp__pill">Selected</span>
+                }
+                <button
+                  type="button"
+                  class="insp__rowdel"
+                  (click)="removeSectorBlock(block.id); $event.stopPropagation()"
+                  [disabled]="r.blocks.length <= 1"
+                  title="Remove block"
+                >×</button>
+              </div>
+              @if (isSectorExpanded(block.id)) {
+                <div class="insp__blockcard-body">
+                  <button type="button" class="insp__linkbtn" (click)="selectSectorBlock(block.id)">
+                    Focus on canvas
+                  </button>
+                  <label class="insp__field">
+                    <span class="insp__label">Display label</span>
+                    <input class="insp__input" type="text" [ngModel]="block.label ?? ''" (ngModelChange)="updateSectorBlock(block.id, { label: $event || undefined })" [placeholder]="block.code" />
+                  </label>
+                  @if (isSectorSelected(block.id)) {
+                    <app-sector-block-seat-panel
+                      [block]="block"
+                      [ringRowLabelStyle]="r.rowLabelStyle"
+                      [compact]="true"
+                      (blockChange)="updateSectorBlock(block.id, $event)"
+                    />
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="addRingBlock()" [disabled]="r.blocks.length >= 24">+ Add block</button>
+      </section>
+
+      <section class="insp__section">
+        <h3 class="insp__section-title">Ring colors</h3>
+        <label class="insp__color-row">
+          <span class="insp__label">Default block fill</span>
+          <div class="insp__color-input">
+            <input type="color" [ngModel]="r.style.fillColor ?? '#f3e8ff'" (ngModelChange)="setStyle('fillColor', $event)" />
+            <input class="insp__input" type="text" [ngModel]="r.style.fillColor ?? '#f3e8ff'" (ngModelChange)="setStyle('fillColor', $event)" />
+          </div>
+          <span class="insp__foot">Used when a sector doesn't set its own color.</span>
+        </label>
+        <label class="insp__color-row">
+          <span class="insp__label">Stroke color</span>
+          <div class="insp__color-input">
+            <input type="color" [ngModel]="r.style.strokeColor ?? '#e9d5ff'" (ngModelChange)="setStyle('strokeColor', $event)" />
+            <input class="insp__input" type="text" [ngModel]="r.style.strokeColor ?? '#e9d5ff'" (ngModelChange)="setStyle('strokeColor', $event)" />
+          </div>
+        </label>
+        <label class="insp__color-row">
+          <span class="insp__label">Label color</span>
+          <div class="insp__color-input">
+            <input type="color" [ngModel]="r.style.labelColor ?? '#1e293b'" (ngModelChange)="setStyle('labelColor', $event)" />
+            <input class="insp__input" type="text" [ngModel]="r.style.labelColor ?? '#1e293b'" (ngModelChange)="setStyle('labelColor', $event)" />
+          </div>
+          <span class="insp__foot">Color for sector labels on the canvas (A01, B02, …).</span>
+        </label>
+      </section>
+    }
+
+    @if (rectLayer(); as rl) {
+      <div class="insp__row">
+        <label class="insp__field">
+          <span class="insp__label">Rows / block</span>
+          <input class="insp__input" type="number" min="0" max="40" [ngModel]="rectRows()" (ngModelChange)="setRectSeats(num($event), rectSeats())" />
+        </label>
+        <label class="insp__field">
+          <span class="insp__label">Seats / row</span>
+          <input class="insp__input" type="number" min="0" max="80" [ngModel]="rectSeats()" (ngModelChange)="setRectSeats(rectRows(), num($event))" />
+        </label>
+      </div>
+      <div class="insp__subhead"><span>Add block</span></div>
+      <div class="insp__sides">
+        @for (side of rectSides; track side) {
+          <button type="button" class="insp__mini" (click)="addRectBlock(side)">+ {{ side }}</button>
+        }
+      </div>
+      @for (block of rl.blocks; track block.id) {
+        <div class="insp__rowcard">
+          <span class="insp__rowtag">{{ block.code }}</span>
+          <span class="insp__rowtag insp__rowtag--side">{{ block.side }}</span>
+          <button type="button" class="insp__rowdel" (click)="removeRectBlock(block.id)">×</button>
+        </div>
+      }
+    }
+
+    @if (aisle(); as a) {
+      <label class="insp__field">
+        <span class="insp__label">Orientation</span>
+        <select class="insp__input" [ngModel]="a.orientation" (ngModelChange)="patch({ orientation: $event })">
+          <option value="vertical">Vertical</option>
+          <option value="horizontal">Horizontal</option>
+        </select>
+      </label>
+    }
+
+    @if (label(); as l) {
+      <label class="insp__field">
+        <span class="insp__label">Text</span>
+        <input class="insp__input" type="text" [ngModel]="l.text" (ngModelChange)="patch({ text: $event })" />
+      </label>
+      <div class="insp__row">
+        <label class="insp__field">
+          <span class="insp__label">Size</span>
+          <input class="insp__input" type="number" min="8" max="80" [ngModel]="l.fontSize" (ngModelChange)="patch({ fontSize: num($event) })" />
+        </label>
+        <label class="insp__field">
+          <span class="insp__label">Weight</span>
+          <select class="insp__input" [ngModel]="l.fontWeight" (ngModelChange)="patch({ fontWeight: $event })">
+            <option value="normal">Normal</option>
+            <option value="bold">Bold</option>
+          </select>
+        </label>
+      </div>
+      <label class="insp__field">
+        <span class="insp__label">Align</span>
+        <select class="insp__input" [ngModel]="l.textAlign" (ngModelChange)="patch({ textAlign: $event })">
+          <option value="left">Left</option>
+          <option value="center">Center</option>
+          <option value="right">Right</option>
+        </select>
+      </label>
+    }
+
+    @if (!isDrawing() && el.type !== 'layer-ring') {
+      <section class="insp__section">
+        <h3 class="insp__section-title">Colors</h3>
+        @if (el.type !== 'label') {
+          <label class="insp__color-row">
+            <span class="insp__label">Fill color</span>
+            <div class="insp__color-input">
+              <input type="color" [ngModel]="el.style.fillColor ?? '#dbeafe'" (ngModelChange)="setStyle('fillColor', $event)" />
+              <input class="insp__input" type="text" [ngModel]="el.style.fillColor ?? '#dbeafe'" (ngModelChange)="setStyle('fillColor', $event)" />
+            </div>
+            <span class="insp__foot">Block / wedge background only — does not change the label text.</span>
+          </label>
+        }
+        <label class="insp__color-row">
+          <span class="insp__label">Label color</span>
+          <div class="insp__color-input">
+            <input type="color" [ngModel]="el.style.labelColor ?? '#1e3a8a'" (ngModelChange)="setStyle('labelColor', $event)" />
+            <input class="insp__input" type="text" [ngModel]="el.style.labelColor ?? '#1e3a8a'" (ngModelChange)="setStyle('labelColor', $event)" />
+          </div>
+          <span class="insp__foot">Text colour for labels on 2D and 3D. Not the ring layer label colour.</span>
+        </label>
+      </section>
+    }
+    }
+  }
+  </div>
+} @else if (variant() === 'full' || variant() === 'block-workspace') {
+  <div class="designer-inspector-empty">
+    Select an element on the canvas to edit its properties.
+  </div>
+}

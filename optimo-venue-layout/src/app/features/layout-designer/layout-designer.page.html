@@ -1,0 +1,927 @@
+<div
+  class="designer-page flex flex-col gap-3 p-3 md:gap-4 md:p-4"
+  [class.designer-page--autofill]="inAutoFillLayout()"
+  [class.designer-page--block-workspace]="inBlockWorkspace()"
+>
+  @if (!inAutoFillLayout() || !canSave()) {
+  <section class="designer-box designer-meta-box shrink-0">
+    <div class="designer-meta__header">
+      <div class="designer-meta__fields">
+        <div class="designer-field">
+          <span class="designer-field__label">
+            Template name <span class="designer-field__required" aria-hidden="true">*</span>
+          </span>
+          <input
+            #templateNameInput
+            type="text"
+            required
+            class="designer-field__input"
+            [class.designer-field__input--warn]="!canSave() && canvas.elementCount() > 0"
+            placeholder="e.g. Premadasa cricket oval, Banquet hall — 200 guests"
+            [ngModel]="templateName()"
+            (ngModelChange)="templateName.set($event)"
+          />
+        </div>
+
+        @if (!inAutoFillLayout()) {
+        <label class="designer-field">
+          <span class="designer-field__label">Description (optional)</span>
+          <textarea
+            rows="3"
+            class="designer-field__input designer-field__textarea"
+            placeholder="What kind of events does this layout suit?"
+            [ngModel]="description()"
+            (ngModelChange)="description.set($event)"
+          ></textarea>
+        </label>
+        }
+      </div>
+
+      @if (!inAutoFillLayout()) {
+      <div class="designer-meta__aside">
+        <button type="button" class="designer-back-btn" (click)="confirmBack()">Back</button>
+      </div>
+      }
+    </div>
+
+    @if (!inAutoFillLayout()) {
+    <p class="designer-hint">
+      @if (isFetchingTemplate()) {
+        Downloading template…
+      } @else if (isCanvasBootstrapping()) {
+        Preparing canvas…
+      } @else if (seatHydrationProgress(); as progress) {
+        Loading seats… {{ progress.loaded | number }} / {{ progress.total | number }}
+      } @else {
+        Auto save starts after you add elements or images to the canvas (refresh keeps that work for this session).
+        Use <strong>Save as template</strong> to keep it in the library permanently.
+      }
+      @if (!isTemplateBusy() && !canSave() && canvas.elementCount() > 0) {
+        <span class="designer-hint__notice">Enter a <strong>template name</strong> before saving.</span>
+      }
+      @if (saveNotice(); as msg) {
+        <span class="designer-hint__notice">{{ msg }}</span>
+      }
+    </p>
+    } @else if (!canSave()) {
+    <p class="designer-hint">
+      Enter a <strong>template name</strong> so Auto Fill Save can store seats in the library.
+    </p>
+    }
+  </section>
+  }
+
+  @if (!inAutoFillLayout()) {
+  <section class="designer-box designer-toolbar-box shrink-0">
+    <div class="designer-toolbar">
+      <div class="designer-toolbar__badges">
+        <span class="designer-badge designer-badge--blue">{{ canvas.elementCount() }} elements</span>
+        <span class="designer-badge designer-badge--green">{{ canvas.seatCount() }} seats</span>
+      </div>
+
+      <div class="designer-toolbar__actions">
+        <button type="button" class="designer-toolbar__btn" [disabled]="!canvas.canUndo()" (click)="canvas.undo()">
+          <svg class="designer-toolbar__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M9 14 4 9l5-5" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M4 9h11a4 4 0 0 1 4 4v1" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          Undo
+        </button>
+        <button type="button" class="designer-toolbar__btn" [disabled]="!canvas.canRedo()" (click)="canvas.redo()">
+          <svg class="designer-toolbar__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="m15 14 5-5-5-5" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M20 9H9a4 4 0 0 0-4 4v1" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          Redo
+        </button>
+
+        <div class="designer-zoom">
+          <button
+            type="button"
+            class="designer-zoom__btn"
+            aria-label="Zoom out"
+            (pointerdown)="onZoomButtonDown('out', $event)"
+            (pointerup)="onZoomButtonUp($event)"
+            (pointercancel)="onZoomButtonUp($event)"
+          >−</button>
+          <button
+            type="button"
+            class="designer-zoom__label designer-zoom__label--btn"
+            (click)="resetZoomToDefault()"
+            [attr.aria-label]="'Reset zoom to 100% (currently ' + canvas.zoom() + '%)'"
+          >{{ canvas.zoom() }}%</button>
+          <button
+            type="button"
+            class="designer-zoom__btn"
+            aria-label="Zoom in"
+            (pointerdown)="onZoomButtonDown('in', $event)"
+            (pointerup)="onZoomButtonUp($event)"
+            (pointercancel)="onZoomButtonUp($event)"
+          >+</button>
+        </div>
+      </div>
+    </div>
+  </section>
+  }
+
+  <section class="designer-workspace" [class.designer-workspace--autofill]="inAutoFillLayout()">
+    @if (inBlockWorkspace()) {
+      <div class="designer-workspace__grid designer-workspace__grid--block">
+        <div class="designer-sidebar-col">
+          <app-block-workspace-sidebar />
+        </div>
+
+        <div class="designer-canvas-col designer-canvas-col--block">
+          <app-block-workspace-stepper />
+          <div
+            class="designer-box designer-canvas-box canvas-viewport canvas-viewport--block"
+            [class.canvas-viewport--panning]="canvas.viewportPanning()"
+          >
+            <app-canvas-stage />
+            @if (showCanvasLoadingOverlay()) {
+              <div class="designer-canvas-loading" role="status" aria-live="polite">
+                <span class="designer-canvas-loading__spinner" aria-hidden="true"></span>
+                @if (isFetchingTemplate()) {
+                  <span>Downloading template…</span>
+                } @else if (isCanvasBootstrapping()) {
+                  <span>Preparing canvas…</span>
+                } @else if (seatHydrationProgress(); as progress) {
+                  <span>Loading seats… {{ progress.loaded | number }} / {{ progress.total | number }}</span>
+                } @else {
+                  <span>Loading…</span>
+                }
+              </div>
+            }
+
+            <div class="designer-zoom designer-zoom--floating">
+              <button
+                type="button"
+                class="designer-zoom__btn"
+                aria-label="Zoom out"
+                (pointerdown)="onZoomButtonDown('out', $event)"
+                (pointerup)="onZoomButtonUp($event)"
+                (pointercancel)="onZoomButtonUp($event)"
+              >−</button>
+              <button
+                type="button"
+                class="designer-zoom__label designer-zoom__label--btn"
+                (click)="resetZoomToDefault()"
+                [attr.aria-label]="'Reset zoom to 100% (currently ' + canvas.zoom() + '%)'"
+              >{{ canvas.zoom() }}%</button>
+              <button
+                type="button"
+                class="designer-zoom__btn"
+                aria-label="Zoom in"
+                (pointerdown)="onZoomButtonDown('in', $event)"
+                (pointerup)="onZoomButtonUp($event)"
+                (pointercancel)="onZoomButtonUp($event)"
+              >+</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="designer-box designer-inspector-box">
+          <app-inspector-panel variant="block-workspace" />
+        </div>
+      </div>
+    } @else {
+    <div
+      class="designer-workspace__grid"
+      [class.designer-workspace__grid--autofill]="inAutoFillLayout()"
+    >
+      <div class="designer-sidebar-col">
+        @if (inAutoFillLayout()) {
+        <div class="designer-box designer-start-box designer-start-box--autofill">
+          <h2 class="designer-panel__title">Auto Fill layout</h2>
+          <p class="designer-panel__intro">
+            Seating blocks are selected on the canvas. Use the inspector to run Auto Fill, then save or cancel.
+          </p>
+          <p class="designer-panel__muted designer-panel__muted--tight">
+            Click blocks to include or exclude them. Scroll down for the layers panel.
+          </p>
+        </div>
+        } @else {
+        <div class="designer-box designer-start-box">
+          @if (activePanel() === 'chooser') {
+            <h2 class="designer-panel__title">Start your layout</h2>
+            <p class="designer-panel__intro">
+              First choose how you want to begin: upload a reference image / blueprint or design the
+              venue manually from scratch.
+            </p>
+
+            <div class="start-option-list">
+              @for (option of startOptions; track option.id) {
+                <button
+                  type="button"
+                  class="start-option-card"
+                  [class.start-option-card--featured]="option.featured"
+                  (click)="selectStartOption(option)"
+                >
+                  @if (option.id === 'ai') {
+                    <span
+                      class="ai-image-spec-info start-option-card__spec-info"
+                      tabindex="0"
+                      role="note"
+                      [attr.aria-label]="'Image requirements: ' + blueprintImageSpecSummary"
+                      (click)="$event.stopPropagation()"
+                      (keydown)="$event.stopPropagation()"
+                    >
+                      <span class="ai-image-spec-info__icon" aria-hidden="true">ⓘ</span>
+                      <span class="ai-image-spec-info__tooltip ai-image-spec-info__tooltip--card" role="tooltip">
+                        <span class="ai-image-spec-info__tooltip-title">Image requirements</span>
+                        @for (line of blueprintImageSpecTooltip; track line) {
+                          <span class="ai-image-spec-info__tooltip-line">{{ line }}</span>
+                        }
+                      </span>
+                    </span>
+                  }
+                  <div class="start-option-card__row">
+                    <app-tool-icon [kind]="'start-' + option.id" />
+                    <div class="start-option-card__body">
+                      <div class="start-option-card__head">
+                        <span class="start-option-card__title">{{ option.title }}</span>
+                        @if (option.badge) {
+                          <span class="start-option-card__badge">{{ option.badge }}</span>
+                        }
+                      </div>
+                      <p class="start-option-card__desc">{{ option.description }}</p>
+                    </div>
+                  </div>
+                </button>
+              }
+            </div>
+
+            @if (notice(); as text) {
+              <p class="designer-panel__notice" role="status">{{ text }}</p>
+            }
+          } @else if (activePanel() === 'ai') {
+            <div class="designer-setup-panel">
+              <button
+                type="button"
+                class="designer-setup-panel__back designer-setup-panel__back--top"
+                (click)="backToStartChooser()"
+              >
+                ← Back
+              </button>
+
+              <h2 class="designer-setup-panel__title">AI Layout Detection</h2>
+
+              @if (aiPhase() === 'idle') {
+                <p class="designer-setup-panel__intro">
+                  Upload a seating chart or blueprint — OCR reads the block names and the
+                  AI rebuilds the tiers, blocks, and stands as editable elements.
+                </p>
+
+                @if (canvas.referenceImage(); as ref) {
+                  <div class="ai-canvas-ref">
+                    <span class="ai-canvas-ref__label">Chart on canvas</span>
+                    <span class="ai-canvas-ref__name" [title]="ref.name ?? ''">{{ ref.name ?? 'Uploaded chart' }}</span>
+                    <button type="button" class="ai-canvas-ref__remove" (click)="removeCanvasReferenceImage()">
+                      Remove from canvas
+                    </button>
+                  </div>
+                }
+
+                <label class="upload-dropzone upload-dropzone--ai">
+                  <input
+                    type="file"
+                    class="sr-only"
+                    [attr.accept]="blueprintImageSpec.acceptMime"
+                    (change)="onFileChosen($event, 'ai')"
+                  />
+                  <span class="upload-dropzone__icon" aria-hidden="true">🏟️</span>
+                  <span class="upload-dropzone__primary">Drop stadium image here</span>
+                  <span class="upload-dropzone__secondary">or click to choose file</span>
+                  <span class="upload-dropzone__formats">{{ blueprintImageSpec.formatsLabel }}</span>
+                  <span class="upload-dropzone__spec">{{ blueprintImageSpecSummary }} · max {{ blueprintImageSpec.maxFileMb }} MB</span>
+                </label>
+              } @else if (aiPhase() === 'preview') {
+                <div class="ai-preview">
+                  @if (aiPreviewUrl(); as url) {
+                    <div class="ai-preview__frame">
+                      <img class="ai-preview__img" [src]="url" alt="Selected blueprint preview" />
+                      <button
+                        type="button"
+                        class="ai-preview__remove"
+                        title="Remove image"
+                        aria-label="Remove uploaded image"
+                        (click)="removeAiImage()"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  }
+                  @if (aiFileName(); as name) {
+                    <p class="ai-preview__name" [title]="name">{{ name }}</p>
+                  }
+
+                  <label class="ai-toggle">
+                    <input
+                      type="checkbox"
+                      [checked]="aiIncludeSeats()"
+                      (change)="aiIncludeSeats.set($any($event.target).checked)"
+                    />
+                    <span>
+                      Include seats in generated layout (rows × seats per block). Leave off for
+                      block shapes only — no seat dots.
+                    </span>
+                  </label>
+
+                  <button type="button" class="ai-btn ai-btn--primary" (click)="startAiAnalysis()">
+                    ✦ Analyze with AI
+                  </button>
+                  <button type="button" class="ai-btn" (click)="removeAiImage()">
+                    Remove image
+                  </button>
+                  <button type="button" class="ai-btn ai-btn--ghost" (click)="resetAi()">
+                    Choose different image
+                  </button>
+                </div>
+              } @else if (aiPhase() === 'analyzing') {
+                <div class="ai-flow">
+                  @if (aiPreviewUrl(); as url) {
+                    <div class="ai-preview__frame ai-preview__frame--dim">
+                      <img
+                        class="ai-preview__img"
+                        [src]="url"
+                        alt="Blueprint being analysed"
+                      />
+                    </div>
+                  }
+                  <div class="ai-status ai-status--card" role="status">
+                    <span class="ai-status__spinner" aria-hidden="true"></span>
+                    <p class="ai-status__title">Analysing {{ aiFileName() }}…</p>
+                    <p class="ai-status__hint">
+                      Detecting block edges and reading labels from the chart…
+                    </p>
+                  </div>
+                </div>
+              } @else if (aiPhase() === 'result') {
+                <div class="ai-panel-body">
+                  @if (aiPreviewUrl(); as url) {
+                    <div class="ai-preview__frame ai-preview__frame--compact">
+                      <img
+                        class="ai-preview__img"
+                        [src]="url"
+                        alt="Analysed blueprint"
+                      />
+                    </div>
+                  }
+                  @if (aiFileName(); as name) {
+                    <p class="ai-preview__name" [title]="name">{{ name }}</p>
+                  }
+
+                  @if (aiResult(); as result) {
+                    <div class="ai-result">
+                      <div class="ai-venue-card">
+                        <span class="ai-venue-card__title">{{ aiVenueTitle() }}</span>
+                        <span
+                          class="ai-result__confidence"
+                          [class.ai-result__confidence--high]="result.confidence === 'high'"
+                          [class.ai-result__confidence--medium]="result.confidence === 'medium'"
+                          [class.ai-result__confidence--low]="result.confidence === 'low'"
+                        >
+                          {{ result.confidence }} confidence
+                        </span>
+                      </div>
+
+                      <p class="ai-result__paragraph">{{ aiDetectionParagraph() }}</p>
+
+                      <div class="ai-meta-box">
+                        <p class="ai-meta-box__line">Model: client-cv · geometry detected</p>
+                        <p class="ai-meta-box__line">
+                          Blocks:
+                          <strong>{{ result.labeledBlocks.length }}</strong>
+                          detected
+                          @if (result.labeledCount < result.labeledBlocks.length) {
+                            · <strong>{{ result.labeledCount }}</strong> labelled
+                          }
+                          · OCR:
+                          <strong>{{ result.ocrTokenCount }}</strong>
+                          tokens
+                        </p>
+                      </div>
+
+                      <div class="ai-section">
+                        <span class="ai-section__label">Ground / Stage</span>
+                        <div class="ai-section__row">
+                          <input
+                            type="text"
+                            class="ai-input"
+                            [ngModel]="aiCenterpieceName()"
+                            (ngModelChange)="aiCenterpieceName.set($event)"
+                            placeholder="Name (e.g. Pitch)"
+                          />
+                          <select
+                            class="ai-select"
+                            [ngModel]="aiCenterpieceShape()"
+                            (ngModelChange)="aiCenterpieceShape.set($event)"
+                          >
+                            <option value="rectangle">Rectangle</option>
+                            <option value="oval">Oval</option>
+                            <option value="circle">Circle</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div class="ai-tier-theme ai-section ai-section--tiers">
+                        <div class="ai-section__head">
+                          <span class="ai-section__label">
+                            Seating Tiers ({{ aiTierGroups().length }})
+                          </span>
+                          <span class="ai-section__count">
+                            {{ result.labeledBlocks.length }} blocks
+                          </span>
+                        </div>
+
+                        @for (tier of aiTierGroups(); track tier.ringIndex) {
+                          <div class="ai-tier-card">
+                            <div class="ai-tier-card__head">
+                              <span
+                                class="ai-tier-card__dot"
+                                [style.background]="tier.fillColor"
+                                [style.border-color]="tier.strokeColor"
+                              ></span>
+                              <input
+                                type="text"
+                                class="ai-tier-card__name"
+                                [value]="tier.name"
+                                (input)="
+                                  updateTierEdit(tier.ringIndex, {
+                                    name: $any($event.target).value,
+                                  })
+                                "
+                                placeholder="Tier name"
+                              />
+                              <input
+                                type="text"
+                                class="ai-tier-card__code"
+                                [value]="tier.tierCode"
+                                maxlength="4"
+                                (input)="
+                                  updateTierEdit(tier.ringIndex, {
+                                    tierCode: $any($event.target).value.toUpperCase().slice(0, 4),
+                                  })
+                                "
+                                placeholder="Code"
+                                title="Block code prefix"
+                              />
+                              <button
+                                type="button"
+                                class="ai-tier-card__remove"
+                                aria-label="Remove tier"
+                                disabled
+                              >
+                                ✕
+                              </button>
+                            </div>
+                            <label class="ai-tier-card__blocks-field">
+                              <span class="ai-tier-card__blocks-label">Blocks</span>
+                              <input
+                                type="number"
+                                class="ai-tier-card__blocks-input"
+                                [value]="tier.blockCount"
+                                readonly
+                                tabindex="-1"
+                              />
+                            </label>
+                            <p class="ai-tier-card__preview">Blocks: {{ tier.blockPreview }}</p>
+                          </div>
+                        }
+
+                        <button
+                          type="button"
+                          class="ai-btn ai-btn--dashed"
+                          [disabled]="aiTierGroups().length >= maxAiTiers"
+                          (click)="addAiTier()"
+                        >
+                          + Add tier
+                        </button>
+                      </div>
+
+                      <div class="ai-result__actions ai-result__actions--stack">
+                        <button
+                          type="button"
+                          class="ai-btn ai-btn--primary ai-btn--full"
+                          (click)="applyAiResult()"
+                        >
+                          Generate Layout →
+                        </button>
+                        <div class="ai-result__actions-row">
+                          <button
+                            type="button"
+                            class="ai-btn ai-btn--compact"
+                            (click)="reAnalyze()"
+                          >
+                            Re-analyze
+                          </button>
+                          <button type="button" class="ai-btn ai-btn--compact" (click)="resetAi()">
+                            New image
+                          </button>
+                        </div>
+                      </div>
+
+                      <p class="ai-result__hint">
+                        Chart is set as background; block polygons overlay on top — all editable
+                        in the inspector.
+                      </p>
+                    </div>
+                  }
+                </div>
+              } @else if (aiPhase() === 'error') {
+                <div class="ai-status ai-status--error" role="alert">
+                  <p class="ai-status__title">Couldn’t analyse the image</p>
+                  <p class="ai-status__hint">{{ aiError() }}</p>
+                  <button type="button" class="ai-btn" (click)="resetAi()">Try again</button>
+                </div>
+              }
+            </div>
+          } @else if (activePanel() === 'upload') {
+            <div class="designer-setup-panel">
+              <button
+                type="button"
+                class="designer-setup-panel__back designer-setup-panel__back--top"
+                (click)="backToStartChooser()"
+              >
+                ← Back to start options
+              </button>
+
+              <h2 class="designer-setup-panel__title">Reference Setup</h2>
+
+              <p class="designer-setup-panel__intro">
+                Upload a chart or blueprint to trace over, or add a customer-facing background image.
+              </p>
+
+              <div class="designer-setup-section">
+                <h3 class="designer-setup-section__title">Reference chart</h3>
+                <label class="upload-dropzone upload-dropzone--compact">
+                  <input
+                    type="file"
+                    class="sr-only"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                    (change)="onFileChosen($event, 'reference')"
+                  />
+                  <span class="upload-dropzone__primary">Drop an image here or click to upload</span>
+                  <span class="upload-dropzone__formats">PNG, JPG, JPEG, WEBP, SVG</span>
+                </label>
+                @if (referenceFileName(); as refName) {
+                  <p class="designer-setup-section__filename" [title]="refName">{{ refName }}</p>
+                  <button type="button" class="ai-btn ai-btn--ghost" (click)="clearReferenceImage()">
+                    Remove reference chart
+                  </button>
+                }
+                <p class="designer-setup-section__hint">
+                  Use an existing floor plan or seating chart as a guide. Turn on Trace mode and click
+                  coloured blocks to trace them as editable 2D shapes.
+                </p>
+                @if (referenceFileName()) {
+                  <div class="trace-start-card">
+                    <p class="trace-start-card__text">
+                      @if (canvas.elementCount() > 0) {
+                        You already have elements on the canvas. Start fresh from the uploaded chart
+                        to trace each block one by one.
+                      } @else {
+                        Ready to trace blocks on top of this blueprint? Click
+                        <strong>Start designing</strong>, turn on Trace mode, then click each coloured section.
+                      }
+                    </p>
+                    <button
+                      type="button"
+                      class="ai-btn ai-btn--primary ai-btn--full"
+                      (click)="startDesigningFromUploadedImage()"
+                    >
+                      Start designing from uploaded image
+                    </button>
+                  </div>
+                }
+              </div>
+
+              <div class="designer-setup-section">
+                <h3 class="designer-setup-section__title">Customer background</h3>
+                <label class="upload-dropzone upload-dropzone--compact">
+                  <input
+                    type="file"
+                    class="sr-only"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                    (change)="onFileChosen($event, 'background')"
+                  />
+                  <span class="upload-dropzone__primary">Drop an image here or click to upload</span>
+                  <span class="upload-dropzone__formats">PNG, JPG, JPEG, WEBP, SVG</span>
+                </label>
+                <p class="designer-setup-section__hint">
+                  Add a decorative background that ticket buyers will see — for presentation only, not
+                  for tracing.
+                </p>
+              </div>
+            </div>
+          }
+
+          @if (activePanel() !== 'chooser' && notice(); as text) {
+            <p class="designer-panel__notice" role="status">{{ text }}</p>
+          }
+        </div>
+        }
+
+        @if (audit.phase() !== 'idle') {
+          <div class="designer-box">
+            <app-blueprint-audit-panel />
+          </div>
+        }
+
+        <div class="designer-box designer-elements-box">
+          <app-seating-import-panel />
+
+          @if (hasReferenceOnCanvas()) {
+            <div class="trace-panel">
+              <h3 class="designer-panel__subtitle">Blueprint background</h3>
+              <p class="designer-panel__muted designer-panel__muted--tight">
+                Hide the uploaded chart to see only your 2D blocks (eye button on the canvas
+                does the same).
+              </p>
+              <button
+                type="button"
+                class="trace-panel__toggle"
+                [class.trace-panel__toggle--active]="canvas.referenceImageVisible()"
+                (click)="canvas.toggleReferenceImageVisible()"
+              >
+                {{ canvas.referenceImageVisible() ? 'Background: ON' : 'Background: OFF' }}
+              </button>
+
+              <h3 class="designer-panel__subtitle">Trace blocks</h3>
+              <p class="designer-panel__muted designer-panel__muted--tight">
+                Turn <strong>Trace mode ON</strong>, then click coloured sections on the blueprint to
+                create matching 2D block shapes (colour and block number from the chart).
+                Long-press a block to open its customization workspace.
+              </p>
+              <button
+                type="button"
+                class="trace-panel__toggle"
+                [class.trace-panel__toggle--active]="canvas.colorDetectMode()"
+                (click)="toggleTraceMode()"
+              >
+                {{ canvas.colorDetectMode() ? 'Trace mode: ON' : 'Trace mode: OFF' }}
+              </button>
+              <p class="designer-panel__muted designer-panel__muted--tight">
+                Or place dots around a block yourself when automatic tracing is awkward.
+              </p>
+              <button
+                type="button"
+                class="trace-panel__toggle"
+                [class.trace-panel__toggle--active]="isDrawDotsMode()"
+                (click)="toggleDrawDotsMode()"
+              >
+                {{ isDrawDotsMode() ? 'Draw dots: ON' : 'Draw dots: OFF' }}
+              </button>
+              <label class="trace-panel__slider">
+                <span class="trace-panel__slider-label">Colour sensitivity</span>
+                <input
+                  type="range"
+                  min="24"
+                  max="80"
+                  step="4"
+                  [ngModel]="canvas.colorDetectTolerance()"
+                  (ngModelChange)="canvas.setColorDetectTolerance($event)"
+                />
+              </label>
+            </div>
+          }
+        </div>
+
+        @if (!inAutoFillLayout()) {
+        <div class="designer-box designer-elements-box">
+          <h3 class="designer-panel__subtitle">Add element</h3>
+          <div class="designer-elements-list">
+            <p class="designer-panel__category">Focus area</p>
+            <p class="designer-panel__muted designer-panel__muted--tight">
+              Custom Piece for freeform drawing. Center Piece for preset shapes.
+            </p>
+
+            <div class="element-tool-list">
+              @for (item of focusElements; track item.id) {
+                <app-element-tool-card
+                  [definition]="item"
+                  [active]="false"
+                  (select)="onElementSelect($event)"
+                />
+              }
+            </div>
+
+            <p class="designer-panel__category designer-panel__category--spaced">Annotations &amp; presets</p>
+
+            <div class="element-tool-list">
+              @for (item of annotationElements; track item.id) {
+                <app-element-tool-card
+                  [definition]="item"
+                  [active]="false"
+                  (select)="onElementSelect($event)"
+                />
+              }
+            </div>
+          </div>
+        </div>
+        }
+      </div>
+
+      <div class="designer-canvas-col">
+        <div
+          class="designer-box designer-canvas-box canvas-viewport"
+          [class.canvas-viewport--panning]="canvas.viewportPanning()"
+        >
+          <app-canvas-stage />
+          @if (showCanvasLoadingOverlay()) {
+            <div class="designer-canvas-loading" role="status" aria-live="polite">
+              <span class="designer-canvas-loading__spinner" aria-hidden="true"></span>
+              @if (isFetchingTemplate()) {
+                <span>Downloading template…</span>
+              } @else if (isCanvasBootstrapping()) {
+                <span>Preparing canvas…</span>
+              } @else if (seatHydrationProgress(); as progress) {
+                <span>Loading seats… {{ progress.loaded | number }} / {{ progress.total | number }}</span>
+              } @else {
+                <span>Loading…</span>
+              }
+            </div>
+          }
+
+          <div class="designer-zoom designer-zoom--floating">
+            @if (hasReferenceOnCanvas()) {
+              <button
+                type="button"
+                class="designer-zoom__btn designer-zoom__btn--eye"
+                [class.designer-zoom__btn--off]="!canvas.referenceImageVisible()"
+                [attr.aria-label]="canvas.referenceImageVisible() ? 'Hide blueprint background' : 'Show blueprint background'"
+                [title]="canvas.referenceImageVisible() ? 'Hide blueprint background' : 'Show blueprint background'"
+                (click)="canvas.toggleReferenceImageVisible()"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  @if (canvas.referenceImageVisible()) {
+                    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                    <circle cx="12" cy="12" r="3" />
+                  } @else {
+                    <path d="M3 3l18 18" stroke-linecap="round" />
+                    <path d="M10.6 10.6A3 3 0 0 0 12 15a3 3 0 0 0 2.4-4.4M6.7 6.7C4.6 8.1 3 10 2 12s3.5 7 10 7c1.8 0 3.4-.4 4.8-1.1M17.3 17.3C19.4 15.9 21 14 22 12s-3.5-7-10-7c-1.8 0-3.4.4-4.8 1.1" />
+                  }
+                </svg>
+              </button>
+            }
+            <button
+              type="button"
+              class="designer-zoom__btn"
+              aria-label="Zoom out"
+              (pointerdown)="onZoomButtonDown('out', $event)"
+              (pointerup)="onZoomButtonUp($event)"
+              (pointercancel)="onZoomButtonUp($event)"
+            >−</button>
+            <button
+              type="button"
+              class="designer-zoom__label designer-zoom__label--btn"
+              (click)="resetZoomToDefault()"
+              [attr.aria-label]="'Reset zoom to 100% (currently ' + canvas.zoom() + '%)'"
+            >{{ canvas.zoom() }}%</button>
+            <button
+              type="button"
+              class="designer-zoom__btn"
+              aria-label="Zoom in"
+              (pointerdown)="onZoomButtonDown('in', $event)"
+              (pointerup)="onZoomButtonUp($event)"
+              (pointercancel)="onZoomButtonUp($event)"
+            >+</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="designer-box designer-inspector-box">
+        <app-inspector-panel (saveAutoFillLayout)="saveAutoFillLayout()" />
+      </div>
+    </div>
+
+    <div class="designer-box designer-layers-box">
+      <app-layers-panel />
+    </div>
+    }
+  </section>
+
+  @if (!inAutoFillLayout()) {
+  <section class="designer-box designer-footer-box shrink-0">
+    <div class="designer-footer-bar">
+      @if (!canSave() && canvas.elementCount() > 0) {
+        <p class="designer-footer-bar__hint">
+          ↑ Type a <strong>template name</strong> at the top to enable save
+        </p>
+      }
+      <div class="designer-footer-bar__actions">
+        <button type="button" class="designer-footer-btn designer-footer-btn--back" (click)="confirmBack()">
+          Back
+        </button>
+        <button
+          type="button"
+          class="designer-footer-btn designer-footer-btn--save"
+          [class.designer-footer-btn--save-muted]="!canSave()"
+          [disabled]="isSaving() || isTemplateBusy()"
+          [title]="canSave() ? 'Save to Supabase' : 'Template name is required (top of page)'"
+          (click)="saveTemplate()"
+        >
+          {{ isSaving() ? 'Saving…' : 'Save as template' }}
+        </button>
+      </div>
+    </div>
+  </section>
+  }
+
+  @if (!inAutoFillLayout() && canAddParking()) {
+  <section class="designer-box designer-parking-box shrink-0">
+    <div class="venue-layouts-section__head">
+      <div>
+        <h3 class="venue-layouts-section__title">Parking layouts</h3>
+        <p class="venue-layouts-section__intro">Parking lots linked to this venue.</p>
+      </div>
+      <button type="button" class="designer-toolbar__btn" (click)="goToParkingLayout()">
+        + Add Parking
+      </button>
+    </div>
+
+    @if (parkingLayoutsLoading()) {
+      <p class="venue-layouts-section__empty">Loading parking layouts…</p>
+    } @else if (parkingLayouts().length === 0) {
+      <div class="venue-layouts-section__empty venue-layouts-section__empty--dashed">
+        No parking layouts yet. Click <strong>+ Add Parking</strong> to create one.
+      </div>
+    } @else {
+      <ul class="template-grid">
+        @for (p of parkingLayouts(); track p.id) {
+          <li>
+            <article class="template-card">
+              <div class="template-card__preview-wrap">
+                <app-layout-preview [config]="p.layout_config" />
+              </div>
+              <div class="template-card__body">
+                <h4 class="template-card__name">{{ p.name }}</h4>
+                @if (p.description) {
+                  <p class="template-card__desc">{{ p.description }}</p>
+                } @else {
+                  <p class="template-card__desc template-card__desc--muted">No description</p>
+                }
+                <footer class="template-card__actions">
+                  <button type="button" class="template-card__edit" (click)="editParkingLayout(p.id)">
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    class="template-card__delete"
+                    [class.template-card__delete--confirm]="isParkingDeleteConfirm(p.id)"
+                    [disabled]="isParkingDeleteBusy(p.id)"
+                    (click)="onDeleteParkingClick(p.id, p.name)"
+                  >
+                    {{ parkingDeleteLabel(p.id) }}
+                  </button>
+                </footer>
+              </div>
+            </article>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+  }
+</div>
+
+<app-bulk-apply-seating-modal />
+
+@if (canvas.diningBackgroundAdjust(); as bgAdj) {
+  <app-dining-background-adjust
+    [image]="bgAdj.source"
+    [blockAspect]="bgAdj.blockAspect"
+    [clipSource]="bgAdj.clipSource"
+    [initialFit]="bgAdj.initialFit"
+    (applied)="canvas.commitDiningBackgroundAdjust($event)"
+    (cancelled)="canvas.cancelDiningBackgroundAdjust()"
+  />
+}
+
+@if (leaveDialogOpen()) {
+  <div class="app-dialog-backdrop" (click)="closeLeaveDialog()">
+    <div
+      class="app-dialog"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="leave-layout-dialog-title"
+      aria-describedby="leave-layout-dialog-desc"
+      (click)="$event.stopPropagation()"
+    >
+      <header class="app-dialog__head">
+        <h2 id="leave-layout-dialog-title" class="app-dialog__title">Leave this layout?</h2>
+        <p id="leave-layout-dialog-desc" class="app-dialog__intro">
+          Your current design will be removed if you go back. Unsaved changes in this session will be lost.
+        </p>
+      </header>
+      <footer class="app-dialog__actions">
+        <button type="button" class="app-dialog__btn app-dialog__btn--ghost" (click)="closeLeaveDialog()">
+          Stay on page
+        </button>
+        <button type="button" class="app-dialog__btn app-dialog__btn--danger" (click)="confirmLeave()">
+          Leave layout
+        </button>
+      </footer>
+    </div>
+  </div>
+}

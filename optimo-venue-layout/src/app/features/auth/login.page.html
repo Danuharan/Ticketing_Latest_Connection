@@ -1,0 +1,48 @@
+<div class="flex min-h-screen items-center justify-center bg-slate-50 p-4 dark:bg-slate-950">
+  <div class="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+    <h1 class="m-0 text-xl font-semibold text-slate-900 dark:text-slate-100">Optimo Venue Layout</h1>
+    <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Sign in with your Supabase account.</p>
+
+    <form class="mt-6 grid gap-4" (ngSubmit)="submit()">
+      <label class="grid gap-1 text-sm">
+        <span class="font-medium text-slate-700 dark:text-slate-300">Email</span>
+        <input
+          type="email"
+          required
+          autocomplete="email"
+          class="rounded-lg border border-slate-300 px-3 py-2 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
+          [ngModel]="email()"
+          (ngModelChange)="email.set($event)"
+          name="email"
+        />
+      </label>
+
+      <label class="grid gap-1 text-sm">
+        <span class="font-medium text-slate-700 dark:text-slate-300">Password</span>
+        <input
+          type="password"
+          required
+          autocomplete="current-password"
+          class="rounded-lg border border-slate-300 px-3 py-2 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
+          [ngModel]="password()"
+          (ngModelChange)="password.set($event)"
+          name="password"
+        />
+      </label>
+
+      @if (error(); as err) {
+        <p class="m-0 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+          {{ err }}
+        </p>
+      }
+
+      <button
+        type="submit"
+        class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+        [disabled]="loading()"
+      >
+        {{ loading() ? 'Signing in…' : 'Sign in' }}
+      </button>
+    </form>
+  </div>
+</div>

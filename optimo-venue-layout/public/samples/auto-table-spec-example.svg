@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1100" viewBox="0 0 800 1100">
+  <rect width="800" height="1100" fill="#f8fafc"/>
+  <rect x="40" y="40" width="720" height="1020" fill="#ffffff" stroke="#cbd5e1" stroke-width="2" rx="12"/>
+
+  <text x="400" y="90" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#0f172a">DINING TABLE SPECIFICATION</text>
+  <text x="400" y="125" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="#64748b">Upload this sheet to Auto table create</text>
+
+  <text x="80" y="180" font-family="Arial, sans-serif" font-size="20" font-weight="700" fill="#1e293b">Block name: Ballroom A</text>
+
+  <text x="80" y="230" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#1e293b">Block sides (metres)</text>
+  <text x="100" y="265" font-family="Arial, sans-serif" font-size="16" fill="#334155">Side 1: 12.0 m</text>
+  <text x="100" y="295" font-family="Arial, sans-serif" font-size="16" fill="#334155">Side 2: 10.0 m</text>
+  <text x="100" y="325" font-family="Arial, sans-serif" font-size="16" fill="#334155">Side 3: 12.0 m</text>
+  <text x="100" y="355" font-family="Arial, sans-serif" font-size="16" fill="#334155">Side 4: 10.0 m</text>
+
+  <text x="80" y="410" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#1e293b">Table layout</text>
+  <text x="100" y="445" font-family="Arial, sans-serif" font-size="16" fill="#334155">Table count: 20</text>
+  <text x="100" y="475" font-family="Arial, sans-serif" font-size="16" fill="#334155">Table shape: round</text>
+  <text x="100" y="505" font-family="Arial, sans-serif" font-size="16" fill="#334155">Table size: 1.5 m</text>
+  <text x="100" y="535" font-family="Arial, sans-serif" font-size="16" fill="#334155">Chairs per table: 8</text>
+  <text x="100" y="565" font-family="Arial, sans-serif" font-size="16" fill="#334155">Table gap: 0.8 m</text>
+
+  <text x="80" y="620" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#1e293b">Chair size</text>
+  <text x="100" y="655" font-family="Arial, sans-serif" font-size="16" fill="#334155">Chair size: 0.45 m x 0.50 m</text>
+
+  <text x="80" y="710" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#1e293b">Stage and exit</text>
+  <text x="100" y="745" font-family="Arial, sans-serif" font-size="16" fill="#334155">Stage: Side 1 (top / front)</text>
+  <text x="100" y="775" font-family="Arial, sans-serif" font-size="16" fill="#334155">Exit: Side 4 (right)</text>
+
+  <g transform="translate(400, 920)">
+    <rect x="-140" y="-70" width="280" height="140" fill="#312e81" stroke="#1e1b4b" stroke-width="2" rx="4"/>
+    <text x="0" y="8" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#ffffff">Ballroom A</text>
+    <text x="0" y="-95" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#f59e0b">STAGE - Side 1</text>
+    <line x1="0" y1="-80" x2="0" y2="-65" stroke="#f59e0b" stroke-width="2"/>
+    <text x="155" y="0" text-anchor="start" font-family="Arial, sans-serif" font-size="11" fill="#22c55e">EXIT - Side 4</text>
+    <line x1="140" y1="0" x2="125" y2="0" stroke="#22c55e" stroke-width="2"/>
+    <circle cx="-50" cy="20" r="12" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
+    <circle cx="30" cy="20" r="12" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
+    <circle cx="-50" cy="-25" r="12" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
+    <circle cx="30" cy="-25" r="12" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
+  </g>
+</svg>

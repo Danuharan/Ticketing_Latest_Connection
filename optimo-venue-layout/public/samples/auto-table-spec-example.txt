@@ -1,0 +1,22 @@
+DINING TABLE SPECIFICATION
+Block name: Ballroom A
+
+Block sides (metres)
+Side 1: 12.0 m
+Side 2: 10.0 m
+Side 3: 12.0 m
+Side 4: 10.0 m
+
+Table layout
+Table count: 20
+Table shape: round
+Table size: 1.5 m
+Chairs per table: 8
+Table gap: 0.8 m
+
+Chair size
+Chair size: 0.45 m x 0.50 m
+
+Stage and exit
+Stage: Side 1 (top / front)
+Exit: Side 4 (right)

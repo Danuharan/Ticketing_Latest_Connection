@@ -1,0 +1,151 @@
+<div class="admin-app-shell flex h-screen overflow-hidden bg-white dark:bg-slate-900">
+  @if (mobileNavOpen()) {
+    <button
+      type="button"
+      class="fixed inset-0 z-40 bg-slate-900/45 md:hidden"
+      aria-label="Close menu"
+      (click)="closeMobileNav()"
+    ></button>
+  }
+
+  <aside
+    class="fixed inset-y-0 left-0 z-50 flex h-screen w-[min(280px,88vw)] shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white p-4 shadow-xl transition-[width] duration-200 dark:border-slate-700 dark:bg-slate-900 md:translate-x-0 md:shadow-none"
+    [class.md:w-20]="collapsed()"
+    [class.md:w-60]="!collapsed()"
+    [class.max-md:-translate-x-full]="!mobileNavOpen()"
+    [class.max-md:translate-x-0]="mobileNavOpen()"
+  >
+    <div
+      class="mb-4 flex gap-2 md:mb-6"
+      [class]="collapsed() && !mobileNavOpen() ? 'flex-col items-center' : 'min-h-10 items-center justify-between'"
+    >
+      @if (!collapsed() || mobileNavOpen()) {
+        <span class="text-sm font-bold leading-tight text-blue-600">Optimo Venue Layout</span>
+      } @else {
+        <span class="text-sm font-bold text-blue-600">OVL</span>
+      }
+      <button
+        type="button"
+        class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-300 text-slate-500 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800 max-md:hidden"
+        (click)="toggleSidebar()"
+        [attr.aria-label]="collapsed() ? 'Expand sidebar' : 'Collapse sidebar'"
+      >
+        @if (collapsed()) {
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="m9 6 6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        } @else {
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="m15 6-6 6 6 6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        }
+      </button>
+    </div>
+
+    <nav class="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden">
+      @for (item of navItems; track item.label) {
+        @if (item.route) {
+          <a
+            class="block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+            [routerLink]="item.route"
+            routerLinkActive="bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400"
+            [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' }"
+            [title]="collapsed() && !mobileNavOpen() ? item.label : ''"
+            (click)="closeMobileNav()"
+          >
+            {{ collapsed() && !mobileNavOpen() ? item.label.charAt(0) : item.label }}
+          </a>
+        } @else {
+          <button
+            type="button"
+            class="block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+            (click)="showComingSoon(item.label)"
+            [title]="collapsed() && !mobileNavOpen() ? item.label : ''"
+          >
+            {{ collapsed() && !mobileNavOpen() ? item.label.charAt(0) : item.label }}
+          </button>
+        }
+      }
+    </nav>
+
+    <button
+      type="button"
+      class="mt-auto w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+      [title]="collapsed() && !mobileNavOpen() ? 'Logout' : ''"
+      (click)="logout()"
+    >
+      {{ collapsed() && !mobileNavOpen() ? '↪' : 'Logout' }}
+    </button>
+  </aside>
+
+  <div
+    class="flex min-h-0 min-w-0 flex-1 flex-col transition-[margin-left] duration-200"
+    [class.md:ml-20]="collapsed()"
+    [class.md:ml-60]="!collapsed()"
+  >
+    <header
+      class="flex min-h-16 shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 dark:border-slate-700 dark:bg-slate-900 md:px-6"
+    >
+      <div class="flex min-w-0 items-center gap-3">
+        <button
+          type="button"
+          class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-300 text-lg text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800 md:hidden"
+          aria-label="Open menu"
+          (click)="toggleMobileNav()"
+        >
+          ☰
+        </button>
+
+        <h1 class="truncate text-base font-semibold text-slate-900 dark:text-slate-100 sm:text-lg">
+          {{ pageTitle() }}
+        </h1>
+      </div>
+
+      <div class="flex shrink-0 items-center gap-2 sm:gap-3">
+        <button
+          type="button"
+          class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+          [attr.aria-label]="theme.isDark() ? 'Switch to light theme' : 'Switch to dark theme'"
+          (click)="toggleTheme()"
+        >
+          @if (theme.isDark()) {
+            <span aria-hidden="true">☀</span>
+          } @else {
+            <span aria-hidden="true">☾</span>
+          }
+        </button>
+
+        <span class="hidden text-sm font-medium text-slate-600 dark:text-slate-300 sm:inline">
+          {{ auth.displayName() }}
+        </span>
+
+        <div
+          class="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-sm font-semibold text-white"
+          [attr.aria-label]="'User ' + auth.displayName()"
+          [title]="auth.displayName()"
+        >
+          {{ auth.initials() }}
+        </div>
+      </div>
+    </header>
+
+    <main
+      class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-slate-50 dark:bg-slate-950"
+      [class.p-4]="!isDesignerView()"
+      [class.md:p-8]="!isDesignerView()"
+    >
+      <router-outlet />
+    </main>
+  </div>
+
+  @if (toast.message(); as message) {
+    <div
+      class="app-toast"
+      [class.app-toast--success]="toast.tone() === 'success'"
+      [class.app-toast--error]="toast.tone() === 'error'"
+      role="status"
+    >
+      {{ message }}
+    </div>
+  }
+</div>

@@ -1,0 +1,94 @@
+<section class="layers-panel">
+  <header class="layers-panel__head">
+    <h2 class="layers-panel__title">Layers (z-order)</h2>
+    <span class="layers-panel__hint">Bottom → top render order</span>
+  </header>
+
+  @if (rows().length === 0) {
+    <p class="layers-panel__empty">No elements yet. Use the library on the left to add one.</p>
+  } @else {
+    <ul class="layers-panel__list">
+      @for (row of rows(); track trackRow($index, row)) {
+        <li>
+          <button
+            type="button"
+            class="layers-panel__row"
+            [class.layers-panel__row--selected]="row.selected"
+            [class.layers-panel__row--hidden]="!row.visible"
+            (click)="selectLayer(row.el.id)"
+          >
+            <span class="layers-panel__index">{{ row.zIndex }}</span>
+            <span class="layers-panel__swatch" [style.background-color]="row.swatch"></span>
+            <span class="layers-panel__text">
+              <span class="layers-panel__name">{{ row.title }}</span>
+              <span class="layers-panel__type">{{ row.typeLabel }}</span>
+            </span>
+
+            <span class="layers-panel__actions">
+              <button
+                type="button"
+                class="layers-panel__icon"
+                title="Move up (draw on top)"
+                [disabled]="!row.canMoveUp"
+                (click)="moveUp(row.el.id); $event.stopPropagation()"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                class="layers-panel__icon"
+                title="Move down (draw below)"
+                [disabled]="!row.canMoveDown"
+                (click)="moveDown(row.el.id); $event.stopPropagation()"
+              >
+                ↓
+              </button>
+              <button
+                type="button"
+                class="layers-panel__icon"
+                [class.layers-panel__icon--off]="!row.visible"
+                [title]="row.visible ? 'Hide on canvas' : 'Show on canvas'"
+                (click)="toggleVisible(row.el.id, $event)"
+              >
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  @if (row.visible) {
+                    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                    <circle cx="12" cy="12" r="3" />
+                  } @else {
+                    <path d="M3 3l18 18" stroke-linecap="round" />
+                    <path d="M10.6 10.6A3 3 0 0 0 12 15a3 3 0 0 0 2.4-4.4M6.7 6.7C4.6 8.1 3 10 2 12s3.5 7 10 7c1.8 0 3.4-.4 4.8-1.1M17.3 17.3C19.4 15.9 21 14 22 12s-3.5-7-10-7c-1.8 0-3.4.4-4.8 1.1" />
+                  }
+                </svg>
+              </button>
+              <button
+                type="button"
+                class="layers-panel__icon"
+                [class.layers-panel__icon--active]="row.locked"
+                [title]="row.locked ? 'Unlock' : 'Lock'"
+                (click)="toggleLocked(row.el.id, $event)"
+              >
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  @if (row.locked) {
+                    <rect x="5" y="11" width="14" height="10" rx="2" />
+                    <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+                  } @else {
+                    <rect x="5" y="11" width="14" height="10" rx="2" />
+                    <path d="M8 11V8a4 4 0 0 1 7.5-1" />
+                  }
+                </svg>
+              </button>
+              <button
+                type="button"
+                class="layers-panel__icon layers-panel__icon--danger"
+                title="Delete"
+                (click)="removeLayer(row.el.id, $event)"
+              >
+                ×
+              </button>
+            </span>
+          </button>
+        </li>
+      }
+    </ul>
+  }
+</section>

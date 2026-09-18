@@ -1,0 +1,18 @@
+SEATING CHART SPECIFICATION
+Block name: Block 56
+
+Block sides (metres)
+Side 1: 5.0 m
+Side 2: 4.7 m
+Side 3: 5.1 m
+Side 4: 6.6 m
+
+Seating layout
+Rows: 4
+Seats per row: 8
+VIEW POINT: Side 1 (top / audience)
+
+Chair and gaps
+Chair size: 0.45 m x 0.50 m
+Seat gap: 0.10 m
+Row gap: 0.12 m

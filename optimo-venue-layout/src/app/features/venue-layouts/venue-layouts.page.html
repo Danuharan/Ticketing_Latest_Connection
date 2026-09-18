@@ -1,0 +1,167 @@
+<section class="venue-layouts-page">
+  <header class="venue-layouts-page__header">
+    <div>
+      <h2 class="venue-layouts-page__title">Venue Layouts</h2>
+      <p class="venue-layouts-page__subtitle">
+        Reusable venue layouts. Private to your admin account — apply to any event from the event form.
+      </p>
+    </div>
+    <button type="button" class="venue-layouts-page__new-btn" (click)="openNewBlankLayout()">
+      + New blank layout
+    </button>
+  </header>
+
+  @if (error(); as err) {
+    <div class="venue-layouts-page__error">{{ err }}</div>
+  }
+
+  <div class="venue-layouts-section">
+    <div class="venue-layouts-section__head">
+      <div>
+        <h3 class="venue-layouts-section__title">Your Templates</h3>
+        <p class="venue-layouts-section__intro">
+          Templates you have saved. Create a new layout and click <strong>Save as template</strong> to add one here.
+        </p>
+      </div>
+      @if (!loading() && totalCount() > 0) {
+        <span class="venue-layouts-section__count">
+          {{ items().length }} of {{ totalCount() }}
+        </span>
+      }
+    </div>
+
+    @if (loading()) {
+      <ul class="template-grid template-grid--loading">
+        @for (slot of [0, 1]; track slot) {
+          <li class="template-grid__item">
+            <article class="template-card template-card--skeleton" aria-hidden="true">
+              <div class="template-card__preview-wrap template-card__skeleton-block"></div>
+              <div class="template-card__body">
+                <div class="template-card__skeleton-line template-card__skeleton-line--title"></div>
+                <div class="template-card__skeleton-line"></div>
+                <div class="template-card__skeleton-line template-card__skeleton-line--short"></div>
+              </div>
+            </article>
+          </li>
+        }
+      </ul>
+    } @else if (totalCount() === 0) {
+      <div class="venue-layouts-section__empty venue-layouts-section__empty--dashed">
+        No saved templates yet. Create a new blank layout and click <strong>Save as template</strong>.
+      </div>
+    } @else {
+      <ul
+        class="template-grid"
+        [class.template-grid--pair]="gridPairLayout()"
+      >
+        @for (item of items(); track item.id) {
+          <li class="template-grid__item template-grid__item--enter">
+            <article class="template-card">
+              <div class="template-card__preview-wrap">
+                <app-template-thumbnail [src]="item.preview_thumbnail" [alt]="item.name + ' preview'" />
+              </div>
+
+              <div class="template-card__body">
+                <h4 class="template-card__name">{{ item.name }}</h4>
+                @if (item.description) {
+                  <p class="template-card__desc">{{ item.description }}</p>
+                } @else {
+                  <p class="template-card__desc template-card__desc--muted">No description</p>
+                }
+
+                <ul class="template-card__meta">
+                  <li>{{ item.block_count }} blocks</li>
+                  <li>{{ item.seat_count }} seats</li>
+                  <li>Updated {{ formatDate(item.updated_at) }}</li>
+                </ul>
+
+                <div class="template-card__parking">
+                  <h5 class="template-card__parking-title">Parking layouts</h5>
+                  @if (parkingLayoutsFor(item.id).length > 0) {
+                    <ul class="template-card__parking-list">
+                      @for (p of parkingLayoutsFor(item.id); track p.id) {
+                        <li>
+                          <a [routerLink]="['/venue-layouts', item.id, 'parking', p.id, 'edit']">{{ p.name }}</a>
+                        </li>
+                      }
+                    </ul>
+                  } @else {
+                    <p class="template-card__parking-empty">No parking layouts yet.</p>
+                  }
+                  <a
+                    [routerLink]="['/venue-layouts', item.id, 'parking', 'new']"
+                    class="template-card__add-parking"
+                  >+ Add Parking</a>
+                </div>
+
+                <footer class="template-card__actions">
+                  <button
+                    type="button"
+                    class="template-card__edit"
+                    [disabled]="navigatingTemplateId() === item.id"
+                    (mouseenter)="prefetchEditExperience(item.id)"
+                    (click)="openEdit(item.id)"
+                  >
+                    @if (navigatingTemplateId() === item.id) {
+                      Opening…
+                    } @else {
+                      Edit
+                    }
+                  </button>
+                  <button
+                    type="button"
+                    class="template-card__delete"
+                    [class.template-card__delete--confirm]="isDeleteConfirm(item.id)"
+                    [disabled]="isDeleteBusy(item.id)"
+                    (click)="onDeleteClick(item.id, item.name)"
+                  >
+                    {{ deleteLabel(item.id) }}
+                  </button>
+                </footer>
+              </div>
+            </article>
+          </li>
+        }
+
+        @if (hasMore() && !loadingMore()) {
+          <li class="template-grid__item">
+            <button
+              type="button"
+              class="template-card template-card--more"
+              (click)="showMoreTemplates()"
+            >
+              <span class="template-card__more-icon" aria-hidden="true">+</span>
+              <span class="template-card__more-title">Load more templates</span>
+              <span class="template-card__more-sub">
+                {{ remainingCount() }} more saved layout{{ remainingCount() === 1 ? '' : 's' }}
+              </span>
+            </button>
+          </li>
+        }
+
+        @for (slot of loadingSlots(); track slot) {
+          <li class="template-grid__item">
+            <article class="template-card template-card--skeleton" aria-hidden="true">
+              <div class="template-card__preview-wrap template-card__skeleton-block"></div>
+              <div class="template-card__body">
+                <div class="template-card__skeleton-line template-card__skeleton-line--title"></div>
+                <div class="template-card__skeleton-line"></div>
+                <div class="template-card__skeleton-line template-card__skeleton-line--short"></div>
+              </div>
+            </article>
+          </li>
+        }
+      </ul>
+    }
+  </div>
+</section>
+
+@if (navigatingTemplateId()) {
+  <div class="venue-nav-overlay" role="status" aria-live="polite" aria-busy="true">
+    <div class="venue-nav-overlay__card">
+      <span class="designer-canvas-loading__spinner" aria-hidden="true"></span>
+      <p class="venue-nav-overlay__title">Opening editor…</p>
+      <p class="venue-nav-overlay__hint">Loading layout tools and template data.</p>
+    </div>
+  </div>
+}

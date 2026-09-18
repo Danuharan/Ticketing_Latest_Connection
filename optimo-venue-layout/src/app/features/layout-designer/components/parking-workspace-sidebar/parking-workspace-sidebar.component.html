@@ -1,0 +1,461 @@
+<div class="designer-box block-workspace-panel">
+  <button type="button" class="block-workspace-panel__back" (click)="backToLayout()">
+    ← Back to layout
+  </button>
+
+  <h2 class="designer-panel__title">{{ title() }}</h2>
+  <p class="designer-panel__intro">
+    Draw the parking area outline, measure its edges, mark at least one Enter and one Exit,
+    then draw rows of vehicle slots sized to real-world metres.
+  </p>
+
+  @if (!element()) {
+    @if (isDrawingArea()) {
+      <section class="block-workspace-panel__viewpoint">
+        <h3 class="designer-panel__subtitle">Step 1 — Draw parking area</h3>
+        <p class="block-workspace-panel__hint">
+          Click points on the canvas to trace the outline. Hover the first dot (it turns green)
+          and click it, or double-click / press Enter, to close the shape — minimum 3 points.
+        </p>
+        <p class="block-workspace-panel__hint">Points placed: {{ draftPointCount() }}</p>
+        <button
+          type="button"
+          class="insp__btn insp__btn--primary insp__btn--block"
+          [disabled]="draftPointCount() < 3"
+          (click)="finishDrawingArea()"
+        >
+          Finish area
+        </button>
+        <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="cancelDrawingArea()">
+          Cancel
+        </button>
+      </section>
+    } @else {
+      <button type="button" class="insp__btn insp__btn--primary insp__btn--block" (click)="startDrawingArea()">
+        Start drawing
+      </button>
+    }
+  } @else {
+    <section class="block-workspace-panel__viewpoint">
+      <h3 class="designer-panel__subtitle">Outline</h3>
+      @if (isDrawingArea()) {
+        <p class="block-workspace-panel__hint">
+          Click points on the canvas to retrace the outline. Hover the first dot (it turns green)
+          and click it, or double-click / press Enter, to close the shape — minimum 3 points.
+        </p>
+        <p class="block-workspace-panel__hint">Points placed: {{ draftPointCount() }}</p>
+        <button
+          type="button"
+          class="insp__btn insp__btn--primary insp__btn--block"
+          [disabled]="draftPointCount() < 3"
+          (click)="finishDrawingArea()"
+        >
+          Finish area
+        </button>
+        <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="cancelDrawingArea()">
+          Cancel
+        </button>
+      } @else {
+        <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="redrawArea()">
+          Redraw entire outline
+        </button>
+        <label class="block-workspace-panel__field" style="margin-top:0.5rem;">
+          <span class="block-workspace-panel__label">
+            <input
+              type="checkbox"
+              [ngModel]="adjustEdges()"
+              (ngModelChange)="toggleAdjustEdges($event)"
+            />
+            Edit outline curves
+          </span>
+          <span class="block-workspace-panel__hint">
+            Shows a handle at each edge — drag it to bow that edge into a smooth curve.
+          </span>
+        </label>
+      }
+    </section>
+
+    @if (isMeasuringEdges()) {
+      <section class="block-workspace-panel__viewpoint">
+        <h3 class="designer-panel__subtitle">Step 2 — Measure each edge</h3>
+        <p class="block-workspace-panel__hint">
+          Click a side on the canvas or a row below — it turns
+          <strong class="block-workspace-panel__hint-accent--pending">yellow</strong>. Enter its
+          real-world length in metres and save.
+        </p>
+
+        <p class="block-workspace-panel__status" style="margin-bottom:0.5rem;">
+          {{ measuredCount() }} / {{ edges().length }} sides measured
+        </p>
+
+        <ul class="block-workspace-panel__ga-side-list">
+          @for (edge of edges(); track edge.index) {
+            @let isPending = measureEdgeIndex() === edge.index;
+            @let isDone = edge.lengthM != null;
+            <li
+              class="block-workspace-panel__ga-side-card"
+              [class.block-workspace-panel__ga-side-card--pending]="isPending"
+              (click)="selectMeasureEdge(edge.index)"
+            >
+              <div class="block-workspace-panel__ga-side-head">
+                <span
+                  class="block-workspace-panel__ga-side-title"
+                  [class.block-workspace-panel__ga-side-title--pending]="isPending"
+                >
+                  {{ edge.label }} ({{ edge.isCurved ? 'curved' : 'straight' }})
+                </span>
+                @if (isDone && !isPending) {
+                  <span class="block-workspace-panel__ga-side-saved">✓ saved</span>
+                }
+              </div>
+
+              <div class="block-workspace-panel__ga-side-length-row">
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  class="block-workspace-panel__input"
+                  placeholder="Length"
+                  style="flex:1;"
+                  [ngModel]="draftLengths()[edge.index] ?? edge.lengthM ?? null"
+                  (ngModelChange)="setDraftLength(edge.index, +$event || 0)"
+                  (click)="selectMeasureEdge(edge.index)"
+                  (focusin)="selectMeasureEdge(edge.index)"
+                  (keydown.enter)="confirmEdgeLength(edge.index)"
+                />
+                <span class="block-workspace-panel__ga-side-unit">m</span>
+              </div>
+
+              <button
+                type="button"
+                class="insp__btn insp__btn--block block-workspace-panel__ga-side-btn"
+                [class.insp__btn--primary]="!isDone"
+                [class.insp__btn--ghost]="isDone"
+                (click)="$event.stopPropagation(); confirmEdgeLength(edge.index)"
+              >
+                {{ isDone ? 'Update' : 'Save' }}
+              </button>
+            </li>
+          }
+        </ul>
+
+        <button
+          type="button"
+          class="insp__btn insp__btn--primary insp__btn--block block-workspace-panel__ga-side-next"
+          [disabled]="!allMeasured()"
+          (click)="continueToLines()"
+        >
+          Continue → Add parking lines
+        </button>
+      </section>
+    }
+
+    @if (isAccessPointPhase()) {
+      <section class="block-workspace-panel__viewpoint">
+        <h3 class="designer-panel__subtitle">Step 3 — Entrances &amp; Exits</h3>
+        <p class="block-workspace-panel__hint">
+          Mark at least one Enter and one Exit on the outline. Click a button below, then click a
+          point on the edge of the parking area.
+        </p>
+        <p class="block-workspace-panel__status" style="margin-bottom:0.5rem;">
+          {{ enterCount() }} Enter · {{ exitCount() }} Exit
+        </p>
+
+        @if (placingAccessPointKind()) {
+          <p class="block-workspace-panel__hint">
+            Click a point on the outline edge to place the
+            {{ placingAccessPointKind() === 'enter' ? 'Enter' : 'Exit' }} marker.
+          </p>
+          <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="cancelPlacingAccessPoint()">
+            Cancel
+          </button>
+        } @else {
+          <button type="button" class="insp__btn insp__btn--primary insp__btn--block" (click)="startPlacingAccessPoint('enter')">
+            Mark Enter
+          </button>
+          <button
+            type="button"
+            class="insp__btn insp__btn--primary insp__btn--block"
+            style="margin-top:0.4rem;"
+            (click)="startPlacingAccessPoint('exit')"
+          >
+            Mark Exit
+          </button>
+        }
+
+        @if (accessPoints().length > 0) {
+          <ul class="block-workspace-panel__ga-side-list" style="margin-top:0.6rem;">
+            @for (point of accessPoints(); track point.id) {
+              <li class="block-workspace-panel__ga-side-card">
+                <div class="block-workspace-panel__ga-side-head">
+                  <span class="block-workspace-panel__ga-side-title">
+                    {{ point.kind === 'enter' ? 'Enter' : 'Exit' }}
+                  </span>
+                  <button type="button" class="insp__btn insp__btn--ghost" (click)="removeAccessPoint(point.id)">
+                    Remove
+                  </button>
+                </div>
+              </li>
+            }
+          </ul>
+        }
+
+        <button
+          type="button"
+          class="insp__btn insp__btn--primary insp__btn--block block-workspace-panel__ga-side-next"
+          style="margin-top:0.6rem;"
+          [disabled]="!hasRequiredAccessPoints()"
+          (click)="continueToSlots()"
+        >
+          Continue → Add vehicle slots
+        </button>
+      </section>
+    }
+
+    @if (isSlotPhase()) {
+      <section class="block-workspace-panel__viewpoint">
+        <h3 class="designer-panel__subtitle">Step 3 — Vehicle slots</h3>
+
+        <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="toggleDefaultsEditor()">
+          {{ showDefaultsEditor() ? 'Hide' : 'Change' }} default sizes
+        </button>
+
+        @if (showDefaultsEditor()) {
+          <div style="margin-top:0.5rem;">
+            @for (type of vehicleTypes; track type) {
+              <div class="block-workspace-panel__field" style="margin-bottom:0.6rem;">
+                <span class="block-workspace-panel__label">{{ vehicleStyle[type].label }}</span>
+                <div style="display:flex; gap:0.4rem; align-items:flex-end;">
+                  <label style="flex:1;">
+                    <span class="block-workspace-panel__ga-side-unit">Length (m)</span>
+                    <input
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      class="block-workspace-panel__input"
+                      [ngModel]="defaults()[type].lengthM"
+                      (ngModelChange)="updateDefaultLength(type, +$event || 0)"
+                    />
+                  </label>
+                  <label style="flex:1;">
+                    <span class="block-workspace-panel__ga-side-unit">Width (m)</span>
+                    <input
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      class="block-workspace-panel__input"
+                      [ngModel]="defaults()[type].widthM"
+                      (ngModelChange)="updateDefaultWidth(type, +$event || 0)"
+                    />
+                  </label>
+                  <label style="flex:1;">
+                    <span class="block-workspace-panel__ga-side-unit">Aisle (m)</span>
+                    <input
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      class="block-workspace-panel__input"
+                      [ngModel]="defaults()[type].aisleWidthM"
+                      (ngModelChange)="updateDefaultAisle(type, +$event || 0)"
+                    />
+                  </label>
+                </div>
+                <button type="button" class="insp__btn insp__btn--ghost" style="margin-top:0.25rem;" (click)="resetDefault(type)">
+                  Reset to default
+                </button>
+              </div>
+            }
+          </div>
+        }
+
+        <p class="block-workspace-panel__label" style="margin-top:0.6rem;">Pattern</p>
+        <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+          @for (p of patterns; track p.id) {
+            <button
+              type="button"
+              class="insp__btn"
+              [class.insp__btn--primary]="selectedPattern() === p.id"
+              [class.insp__btn--ghost]="selectedPattern() !== p.id"
+              (click)="setPattern(p.id)"
+            >
+              {{ p.label }}
+            </button>
+          }
+        </div>
+
+        @if (isDrawingSlots()) {
+          @if (selectedPattern() === 'one') {
+            <p class="block-workspace-panel__hint" style="margin-top:0.6rem;">
+              Each click on the canvas places one slot. Double-click or press Enter to finish.
+            </p>
+          } @else {
+            <p class="block-workspace-panel__hint" style="margin-top:0.6rem;">
+              Click points on the canvas to draw the row — click further away to fill more slots,
+              click again at an angle to bend the row. Double-click or press Enter to finish.
+            </p>
+          }
+          <p class="block-workspace-panel__hint">Points placed: {{ slotDraftPointCount() }}</p>
+          <button
+            type="button"
+            class="insp__btn insp__btn--primary insp__btn--block"
+            [disabled]="slotDraftPointCount() < minSlotDraftPoints()"
+            (click)="finishAddingSlots()"
+          >
+            Finish lane
+          </button>
+          <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="cancelAddingSlots()">
+            Cancel
+          </button>
+        } @else if (isDrawingCustomSlot()) {
+          <p class="block-workspace-panel__hint" style="margin-top:0.6rem;">
+            Click dots on the canvas tracing the slot's own shape — minimum 3 dots. Press
+            Enter or the button below to confirm, Esc to cancel.
+          </p>
+          <p class="block-workspace-panel__hint">Dots placed: {{ customSlotDraftPointCount() }}</p>
+          <button
+            type="button"
+            class="insp__btn insp__btn--primary insp__btn--block"
+            [disabled]="customSlotDraftPointCount() < 3"
+            (click)="confirmCustomSlot()"
+          >
+            Confirm → create slot
+          </button>
+          <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="cancelCustomSlot()">
+            Cancel
+          </button>
+        } @else {
+          <div style="margin-top:0.6rem; display:flex; flex-direction:column; gap:0.4rem;">
+            @for (type of vehicleTypes; track type) {
+              <button type="button" class="insp__btn insp__btn--primary insp__btn--block" (click)="startAddingSlots(type)">
+                Add {{ vehicleStyle[type].label }} parking
+              </button>
+            }
+            <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="startDrawingCustomSlot()">
+              Draw custom slot (dots)
+            </button>
+          </div>
+        }
+
+        @if (selectedSlot(); as slot) {
+          <p class="block-workspace-panel__label" style="margin-top:0.6rem;">Selected slot</p>
+          <div class="block-workspace-panel__ga-side-card block-workspace-panel__ga-side-card--pending">
+            <div class="block-workspace-panel__ga-side-head">
+              <span class="block-workspace-panel__ga-side-title">
+                {{ slot.label ?? vehicleStyle[slot.vehicleType].label }} ({{ vehicleStyle[slot.vehicleType].label }})
+              </span>
+              <button type="button" class="insp__btn insp__btn--ghost" (click)="removeSelectedSlot()">
+                Remove
+              </button>
+            </div>
+            <p class="block-workspace-panel__hint">
+              Drag the slot on the canvas to adjust its position. Press Delete to remove, Esc to deselect.
+            </p>
+            <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="deselectSlot()">
+              Done
+            </button>
+          </div>
+        } @else if (!isDrawingSlots()) {
+          <p class="block-workspace-panel__hint" style="margin-top:0.5rem;">
+            Click a placed slot on the canvas to select it — then drag to move or remove it.
+          </p>
+        }
+
+        @if (lanes().length > 0) {
+          <p class="block-workspace-panel__label" style="margin-top:0.6rem;">Placed lanes</p>
+          <ul class="block-workspace-panel__ga-side-list">
+            @for (lane of lanes(); track lane.laneId) {
+              <li class="block-workspace-panel__ga-side-card">
+                <div class="block-workspace-panel__ga-side-head">
+                  <span class="block-workspace-panel__ga-side-title">
+                    {{ vehicleStyle[lane.vehicleType].label }} × {{ lane.count }}
+                  </span>
+                  <button type="button" class="insp__btn insp__btn--ghost" (click)="removeLane(lane.laneId)">
+                    Remove
+                  </button>
+                </div>
+              </li>
+            }
+          </ul>
+        }
+
+        <button
+          type="button"
+          class="insp__btn insp__btn--primary insp__btn--block block-workspace-panel__ga-side-next"
+          style="margin-top:0.6rem;"
+          (click)="continueToRoutes()"
+        >
+          Continue → Add routes
+        </button>
+      </section>
+    }
+
+    @if (isRoutePhase()) {
+      <section class="block-workspace-panel__viewpoint">
+        <h3 class="designer-panel__subtitle">Step 3 — Driving routes</h3>
+        <p class="block-workspace-panel__hint">
+          Draw the way a vehicle drives from an Enter gate past the slots to an Exit gate.
+          The route shows as a yellow path with arrows in the driving direction.
+        </p>
+
+        @if (isDrawingRoute()) {
+          <p class="block-workspace-panel__hint">
+            Click points inside the parking area — start at an Enter, end at an Exit.
+            Double-click or press Enter to finish.
+          </p>
+          <p class="block-workspace-panel__hint">Points placed: {{ routeDraftPointCount() }}</p>
+          <button
+            type="button"
+            class="insp__btn insp__btn--primary insp__btn--block"
+            [disabled]="routeDraftPointCount() < 2"
+            (click)="finishDrawingRoute()"
+          >
+            Finish route
+          </button>
+          <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="cancelDrawingRoute()">
+            Cancel
+          </button>
+        } @else {
+          <button type="button" class="insp__btn insp__btn--primary insp__btn--block" (click)="startDrawingRoute()">
+            Draw route
+          </button>
+        }
+
+        @if (routes().length > 0) {
+          <p class="block-workspace-panel__label" style="margin-top:0.6rem;">Placed routes</p>
+          <ul class="block-workspace-panel__ga-side-list">
+            @for (route of routes(); track route.id) {
+              <li class="block-workspace-panel__ga-side-card">
+                <div class="block-workspace-panel__ga-side-head">
+                  <span class="block-workspace-panel__ga-side-title">
+                    {{ route.label ?? 'Route' }}
+                  </span>
+                  <button type="button" class="insp__btn insp__btn--ghost" (click)="removeRoute(route.id)">
+                    Remove
+                  </button>
+                </div>
+              </li>
+            }
+          </ul>
+        }
+
+        <button
+          type="button"
+          class="insp__btn insp__btn--ghost insp__btn--block"
+          style="margin-top:0.6rem;"
+          (click)="backToSlots()"
+        >
+          ← Back to slots
+        </button>
+      </section>
+    }
+
+    <button
+      type="button"
+      class="insp__btn insp__btn--primary insp__btn--block"
+      style="margin-top:0.75rem;"
+      (click)="saveAndExit()"
+    >
+      Save &amp; back to layout
+    </button>
+  }
+</div>

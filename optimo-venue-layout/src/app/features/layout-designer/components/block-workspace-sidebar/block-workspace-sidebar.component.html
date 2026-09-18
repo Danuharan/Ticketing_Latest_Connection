@@ -1,0 +1,974 @@
+<div class="designer-box block-workspace-panel">
+  <button type="button" class="block-workspace-panel__back" (click)="exitWorkspace()">
+    ← Back to layout
+  </button>
+
+  <h2 class="designer-panel__title">Customize block</h2>
+  <p class="designer-panel__intro">
+    {{ blockTitle() }} — choose a block type, set VIEW POINT, label each side, then add seats or tables.
+  </p>
+
+  <label class="block-workspace-panel__field">
+    <span class="block-workspace-panel__label">Block type</span>
+    <select
+      class="block-workspace-panel__select"
+      [ngModel]="selectedBlockType() ?? ''"
+      (ngModelChange)="onBlockTypeChange($event)"
+    >
+      <option value="">Select block type…</option>
+      @for (option of blockTypeOptions; track option.id) {
+        <option [value]="option.id">{{ option.label }}</option>
+      }
+    </select>
+  </label>
+
+  @if (selectedBlockType(); as blockType) {
+    <div class="block-workspace-panel__saved-layouts">
+      <label class="block-workspace-panel__field">
+        <span class="block-workspace-panel__label block-workspace-panel__saved-layouts-label">
+          Saved {{ blockTypeLabel(blockType) }} layouts
+          @if (templates.loading()) {
+            <span class="block-workspace-panel__saved-layouts-spinner" aria-hidden="true"></span>
+          }
+        </span>
+        <select
+          class="block-workspace-panel__select"
+          [ngModel]="selectedConfigId()"
+          (ngModelChange)="onSavedConfigChange($event)"
+          [disabled]="templates.loading() && savedConfigs().length === 0"
+        >
+          <option value="">
+            {{ templates.loading() && savedConfigs().length === 0 ? 'Loading saved layouts…' : 'Choose a saved layout…' }}
+          </option>
+          @for (config of savedConfigs(); track config.id) {
+            <option [value]="config.id">{{ config.name }}</option>
+          }
+        </select>
+        <span class="block-workspace-panel__hint">
+          @if (templates.loading() && savedConfigs().length === 0) {
+            Loading your saved layouts…
+          } @else if (savedConfigs().length === 0) {
+            No saved layouts yet — configure this block and save one below.
+          } @else {
+            Pick a saved layout to apply it to this block. You can tweak it and save again.
+          }
+        </span>
+      </label>
+    </div>
+
+    @if (showViewpointStep()) {
+      <section class="block-workspace-panel__viewpoint">
+        <button type="button" class="block-workspace-panel__step-back" (click)="goBackStep()">
+          ← Back to block type
+        </button>
+        <h3 class="designer-panel__subtitle">Step 2 — Set VIEW POINT</h3>
+        @if (viewpointAutoInferred()) {
+          <p class="block-workspace-panel__hint block-workspace-panel__hint--accent">
+            VIEW POINT auto-set facing <strong>{{ groundFocalLabel() }}</strong> — drag marker to adjust if needed.
+          </p>
+        }
+        <p class="block-workspace-panel__hint">
+          The block stays fixed. Drag the <strong>VIEW POINT</strong> marker around the block to choose which side is the front of the room.
+        </p>
+
+        <button type="button" class="insp__btn insp__btn--ghost insp__btn--block" (click)="refitView()">
+          Fit block to workspace
+        </button>
+
+        <div class="block-workspace-panel__btn-row">
+          <button type="button" class="insp__btn insp__btn--ghost" (click)="adjustViewpoint(-15)">↺ 15°</button>
+          <button type="button" class="insp__btn insp__btn--ghost" (click)="adjustViewpoint(15)">15° ↻</button>
+          <button type="button" class="insp__btn insp__btn--ghost" (click)="resetViewpoint()">Reset to top</button>
+        </div>
+
+        <p class="block-workspace-panel__hint">
+          Drag <strong>VIEW POINT</strong> on the canvas or click anywhere · green edge is the front facing the ground / pitch / centerpiece · if two front sides both face it, both are marked · left, right, and back are not
+        </p>
+
+        @if (currentSideLabel()) {
+          <p class="block-workspace-panel__status">
+            VIEW POINT side: <strong>{{ currentSideLabel() }}</strong>
+          </p>
+        }
+
+        <button type="button" class="insp__btn insp__btn--primary insp__btn--block" (click)="confirmViewpoint()">
+          Confirm VIEW POINT → configure block
+        </button>
+      </section>
+    }
+
+    @if (showSideLabelConfigureStep()) {
+      <section class="block-workspace-panel__viewpoint">
+        @if (blockTypeHasCustomizationFlow(blockType)) {
+          <button type="button" class="block-workspace-panel__step-back" (click)="goBackStep()">
+            ← Back to VIEW POINT
+          </button>
+        }
+        <h3 class="designer-panel__subtitle">
+          @if (blockTypeHasGaFlow(blockType)) {
+            Step 2 — Label each entry side
+          } @else {
+            Step 3 — Label each side
+          }
+        </h3>
+
+        <p class="block-workspace-panel__status" style="margin-bottom:0.5rem;">
+          {{ gaConfiguredCount() }} / {{ gaTotalSideCount() }} sides labelled
+        </p>
+
+        <ul class="block-workspace-panel__ga-side-list">
+          @for (edge of gaWorkspaceEdges(); track edge.id) {
+            @let isPending = gaPendingSideId() === edge.id;
+            @let isDone = edge.isDone;
+            <li
+              class="block-workspace-panel__ga-side-card"
+              [class.block-workspace-panel__ga-side-card--pending]="isPending"
+              [class.block-workspace-panel__ga-side-card--viewpoint]="edge.isViewpoint && !isPending"
+              (click)="canvas.gaSelectSide(edge.id)"
+            >
+              <div class="block-workspace-panel__ga-side-head">
+                <span
+                  class="block-workspace-panel__ga-side-title"
+                  [class.block-workspace-panel__ga-side-title--pending]="isPending"
+                  [class.block-workspace-panel__ga-side-title--viewpoint]="edge.isViewpoint && !isPending"
+                >
+                  {{ edge.sideLabel }}
+                </span>
+                @if (edge.isViewpoint && !isPending) {
+                  <span class="block-workspace-panel__ga-side-viewpoint">VIEW POINT</span>
+                } @else if (isDone && !isPending) {
+                  <span class="block-workspace-panel__ga-side-saved">✓ saved</span>
+                }
+              </div>
+
+              <input
+                [id]="'ga-label-input-' + edge.id"
+                type="text"
+                class="block-workspace-panel__input block-workspace-panel__ga-side-input-spaced"
+                placeholder="e.g. North Gate, Gate A …"
+                [ngModel]="gaDraftLabels()[edge.id] ?? ''"
+                (ngModelChange)="gaSetDraftLabel(edge.id, $event)"
+                (click)="canvas.gaSelectSide(edge.id)"
+                (keydown.enter)="gaConfirmSideById(edge.id)"
+              />
+
+              <div class="block-workspace-panel__ga-side-length-row">
+                <button
+                  type="button"
+                  class="insp__step block-workspace-panel__ga-side-step"
+                  aria-label="Decrease length"
+                  (pointerdown)="onMeasurementStepDown(edge.id, -1, $event)"
+                  (pointerup)="onMeasurementStepUp($event)"
+                  (pointercancel)="onMeasurementStepUp($event)"
+                  (click)="$event.stopPropagation()"
+                >−</button>
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  class="block-workspace-panel__input block-workspace-panel__input--no-spin"
+                  placeholder="Length"
+                  [ngModel]="gaDraftLengths()[edge.id] ?? edge.lengthM ?? edge.suggestedLengthM ?? null"
+                  (ngModelChange)="gaSetDraftLength(edge.id, $event)"
+                  (click)="canvas.gaSelectSide(edge.id)"
+                  (keydown.enter)="gaConfirmSideById(edge.id)"
+                />
+                <button
+                  type="button"
+                  class="insp__step block-workspace-panel__ga-side-step"
+                  aria-label="Increase length"
+                  (pointerdown)="onMeasurementStepDown(edge.id, 1, $event)"
+                  (pointerup)="onMeasurementStepUp($event)"
+                  (pointercancel)="onMeasurementStepUp($event)"
+                  (click)="$event.stopPropagation()"
+                >+</button>
+                <span class="block-workspace-panel__ga-side-unit">m</span>
+              </div>
+
+              <button
+                type="button"
+                class="insp__btn insp__btn--block block-workspace-panel__ga-side-btn"
+                [class.insp__btn--primary]="!isDone"
+                [class.insp__btn--ghost]="isDone"
+                (click)="$event.stopPropagation(); gaConfirmSideById(edge.id)"
+              >
+                {{ isDone ? 'Update' : 'Save' }}
+              </button>
+            </li>
+          }
+        </ul>
+
+        @if (blockTypeHasGaFlow(blockType)) {
+          <button
+            type="button"
+            class="insp__btn insp__btn--primary insp__btn--block block-workspace-panel__ga-side-next"
+            (click)="proceedAfterSideLabelConfigure()"
+          >
+            Next → Set maximum participants
+          </button>
+        }
+
+        @if (showAutofillChoiceSection()) {
+          <section class="block-workspace-panel__autofill">
+            <div
+              class="block-workspace-panel__btn-row"
+              style="margin-top:1rem; align-items:center; justify-content:space-between; gap:0.75rem;"
+            >
+              <h4 class="designer-panel__subtitle" style="margin:0;">Auto Fill settings</h4>
+              <label
+                style="display:flex; align-items:center; gap:0.4rem; cursor:pointer; white-space:nowrap;"
+              >
+                <input
+                  type="checkbox"
+                  [ngModel]="autoFillConfig().curveEnabled === true"
+                  (ngModelChange)="toggleAutoFillCurve($event === true)"
+                />
+                <span class="block-workspace-panel__label" style="margin:0;">Curve</span>
+              </label>
+            </div>
+
+            <p class="block-workspace-panel__hint">
+              @if (autoFillConfig().curveEnabled) {
+                Measurements saved. Set seat dimensions and aisles, then Create seats to preview this block. Use Auto Fill to go to the layout, select/unselect blocks, then click Auto Fill to seat them.
+              } @else {
+                Measurements saved. Create seats previews this block only. Auto Fill opens the layout so you can select/unselect blocks, then click Auto Fill to place seats from each block’s updated measurements.
+              }
+            </p>
+
+            <div
+              class="block-workspace-panel__field afd-field"
+              [class.afd-field--active]="activeAutoFillDim() === 'chairWidth'"
+              (mouseenter)="setAutoFillDimHover('chairWidth', $event)"
+              (mouseleave)="clearAutoFillDimHover('chairWidth')"
+            >
+              <span class="block-workspace-panel__label" id="afd-label-chairWidth">Chair width (m)</span>
+              <div class="block-workspace-panel__ga-side-length-row">
+                <button
+                  type="button"
+                  tabindex="-1"
+                  class="insp__step block-workspace-panel__ga-side-step"
+                  aria-label="Decrease chair width"
+                  (click)="onAutoFillDimStepClick($event)"
+                  (pointerdown)="onAutoFillDimStepDown('chairWidth', -1, $event)"
+                  (pointerup)="onAutoFillDimStepUp($event)"
+                  (pointercancel)="onAutoFillDimStepUp($event)"
+                >−</button>
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.05"
+                  class="block-workspace-panel__input block-workspace-panel__input--no-spin"
+                  aria-labelledby="afd-label-chairWidth"
+                  [ngModel]="autoFillDimValue('chairWidth')"
+                  (ngModelChange)="updateAutoFillConfig({ chairWidthM: parseNum($event) })"
+                  (focus)="setAutoFillDimFocus('chairWidth', $event)"
+                  (blur)="clearAutoFillDimFocus('chairWidth')"
+                />
+                <button
+                  type="button"
+                  tabindex="-1"
+                  class="insp__step block-workspace-panel__ga-side-step"
+                  aria-label="Increase chair width"
+                  (click)="onAutoFillDimStepClick($event)"
+                  (pointerdown)="onAutoFillDimStepDown('chairWidth', 1, $event)"
+                  (pointerup)="onAutoFillDimStepUp($event)"
+                  (pointercancel)="onAutoFillDimStepUp($event)"
+                >+</button>
+                <span class="block-workspace-panel__ga-side-unit">m</span>
+              </div>
+            </div>
+            <div
+              class="block-workspace-panel__field afd-field"
+              [class.afd-field--active]="activeAutoFillDim() === 'chairDepth'"
+              (mouseenter)="setAutoFillDimHover('chairDepth', $event)"
+              (mouseleave)="clearAutoFillDimHover('chairDepth')"
+            >
+              <span class="block-workspace-panel__label" id="afd-label-chairDepth">Chair depth (m)</span>
+              <div class="block-workspace-panel__ga-side-length-row">
+                <button
+                  type="button"
+                  tabindex="-1"
+                  class="insp__step block-workspace-panel__ga-side-step"
+                  aria-label="Decrease chair depth"
+                  (click)="onAutoFillDimStepClick($event)"
+                  (pointerdown)="onAutoFillDimStepDown('chairDepth', -1, $event)"
+                  (pointerup)="onAutoFillDimStepUp($event)"
+                  (pointercancel)="onAutoFillDimStepUp($event)"
+                >−</button>
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.05"
+                  class="block-workspace-panel__input block-workspace-panel__input--no-spin"
+                  aria-labelledby="afd-label-chairDepth"
+                  [ngModel]="autoFillDimValue('chairDepth')"
+                  (ngModelChange)="updateAutoFillConfig({ chairLengthM: parseNum($event) })"
+                  (focus)="setAutoFillDimFocus('chairDepth', $event)"
+                  (blur)="clearAutoFillDimFocus('chairDepth')"
+                />
+                <button
+                  type="button"
+                  tabindex="-1"
+                  class="insp__step block-workspace-panel__ga-side-step"
+                  aria-label="Increase chair depth"
+                  (click)="onAutoFillDimStepClick($event)"
+                  (pointerdown)="onAutoFillDimStepDown('chairDepth', 1, $event)"
+                  (pointerup)="onAutoFillDimStepUp($event)"
+                  (pointercancel)="onAutoFillDimStepUp($event)"
+                >+</button>
+                <span class="block-workspace-panel__ga-side-unit">m</span>
+              </div>
+            </div>
+            <div
+              class="block-workspace-panel__field afd-field"
+              [class.afd-field--active]="activeAutoFillDim() === 'seatGap'"
+              (mouseenter)="setAutoFillDimHover('seatGap', $event)"
+              (mouseleave)="clearAutoFillDimHover('seatGap')"
+            >
+              <span class="block-workspace-panel__label" id="afd-label-seatGap">Seat spacing (m)</span>
+              <div class="block-workspace-panel__ga-side-length-row">
+                <button
+                  type="button"
+                  tabindex="-1"
+                  class="insp__step block-workspace-panel__ga-side-step"
+                  aria-label="Decrease seat spacing"
+                  (click)="onAutoFillDimStepClick($event)"
+                  (pointerdown)="onAutoFillDimStepDown('seatGap', -1, $event)"
+                  (pointerup)="onAutoFillDimStepUp($event)"
+                  (pointercancel)="onAutoFillDimStepUp($event)"
+                >−</button>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.001"
+                  class="block-workspace-panel__input block-workspace-panel__input--no-spin"
+                  aria-labelledby="afd-label-seatGap"
+                  [ngModel]="autoFillDimValue('seatGap')"
+                  (ngModelChange)="updateAutoFillConfig({ seatGapM: parseNum($event) })"
+                  (focus)="setAutoFillDimFocus('seatGap', $event)"
+                  (blur)="clearAutoFillDimFocus('seatGap')"
+                />
+                <button
+                  type="button"
+                  tabindex="-1"
+                  class="insp__step block-workspace-panel__ga-side-step"
+                  aria-label="Increase seat spacing"
+                  (click)="onAutoFillDimStepClick($event)"
+                  (pointerdown)="onAutoFillDimStepDown('seatGap', 1, $event)"
+                  (pointerup)="onAutoFillDimStepUp($event)"
+                  (pointercancel)="onAutoFillDimStepUp($event)"
+                >+</button>
+                <span class="block-workspace-panel__ga-side-unit">m</span>
+              </div>
+            </div>
+            <div
+              class="block-workspace-panel__field afd-field"
+              [class.afd-field--active]="activeAutoFillDim() === 'rowGap'"
+              (mouseenter)="setAutoFillDimHover('rowGap', $event)"
+              (mouseleave)="clearAutoFillDimHover('rowGap')"
+            >
+              <span class="block-workspace-panel__label" id="afd-label-rowGap">Row gap (m)</span>
+              <div class="block-workspace-panel__ga-side-length-row">
+                <button
+                  type="button"
+                  tabindex="-1"
+                  class="insp__step block-workspace-panel__ga-side-step"
+                  aria-label="Decrease row gap"
+                  (click)="onAutoFillDimStepClick($event)"
+                  (pointerdown)="onAutoFillDimStepDown('rowGap', -1, $event)"
+                  (pointerup)="onAutoFillDimStepUp($event)"
+                  (pointercancel)="onAutoFillDimStepUp($event)"
+                >−</button>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.001"
+                  class="block-workspace-panel__input block-workspace-panel__input--no-spin"
+                  aria-labelledby="afd-label-rowGap"
+                  [ngModel]="autoFillDimValue('rowGap')"
+                  (ngModelChange)="updateAutoFillConfig({ rowGapM: parseNum($event) })"
+                  (focus)="setAutoFillDimFocus('rowGap', $event)"
+                  (blur)="clearAutoFillDimFocus('rowGap')"
+                />
+                <button
+                  type="button"
+                  tabindex="-1"
+                  class="insp__step block-workspace-panel__ga-side-step"
+                  aria-label="Increase row gap"
+                  (click)="onAutoFillDimStepClick($event)"
+                  (pointerdown)="onAutoFillDimStepDown('rowGap', 1, $event)"
+                  (pointerup)="onAutoFillDimStepUp($event)"
+                  (pointercancel)="onAutoFillDimStepUp($event)"
+                >+</button>
+                <span class="block-workspace-panel__ga-side-unit">m</span>
+              </div>
+            </div>
+            <div
+              class="block-workspace-panel__field afd-field"
+              [class.afd-field--active]="activeAutoFillDim() === 'borderGap'"
+              (mouseenter)="setAutoFillDimHover('borderGap', $event)"
+              (mouseleave)="clearAutoFillDimHover('borderGap')"
+            >
+              <span class="block-workspace-panel__label" id="afd-label-borderGap">Border gap (m)</span>
+              <div class="block-workspace-panel__ga-side-length-row">
+                <button
+                  type="button"
+                  tabindex="-1"
+                  class="insp__step block-workspace-panel__ga-side-step"
+                  aria-label="Decrease border gap"
+                  (click)="onAutoFillDimStepClick($event)"
+                  (pointerdown)="onAutoFillDimStepDown('borderGap', -1, $event)"
+                  (pointerup)="onAutoFillDimStepUp($event)"
+                  (pointercancel)="onAutoFillDimStepUp($event)"
+                >−</button>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.001"
+                  class="block-workspace-panel__input block-workspace-panel__input--no-spin"
+                  aria-labelledby="afd-label-borderGap"
+                  [ngModel]="autoFillDimValue('borderGap')"
+                  (ngModelChange)="updateAutoFillConfig({ borderGapM: parseNum($event) })"
+                  (focus)="setAutoFillDimFocus('borderGap', $event)"
+                  (blur)="clearAutoFillDimFocus('borderGap')"
+                />
+                <button
+                  type="button"
+                  tabindex="-1"
+                  class="insp__step block-workspace-panel__ga-side-step"
+                  aria-label="Increase border gap"
+                  (click)="onAutoFillDimStepClick($event)"
+                  (pointerdown)="onAutoFillDimStepDown('borderGap', 1, $event)"
+                  (pointerup)="onAutoFillDimStepUp($event)"
+                  (pointercancel)="onAutoFillDimStepUp($event)"
+                >+</button>
+                <span class="block-workspace-panel__ga-side-unit">m</span>
+              </div>
+            </div>
+
+            @if (activeAutoFillDim(); as dim) {
+              @if (afdPopoverPos(); as pos) {
+                @let g = afdGeometry();
+                <div
+                  class="afd-popover"
+                  [class.afd-popover--shown]="afdPopoverShown()"
+                  [style.left.px]="pos.left"
+                  [style.top.px]="pos.top"
+                >
+                  <svg
+                    class="afd__svg"
+                    viewBox="0 0 240 150"
+                    role="img"
+                    aria-label="Diagram of a seating block showing which measurement this field controls"
+                  >
+                    <!-- Block outline (scaled from the real measurements) -->
+                    <rect
+                      class="afd__block"
+                      [attr.x]="g.blockX" [attr.y]="g.blockY"
+                      [attr.width]="g.blockW" [attr.height]="g.blockH"
+                      rx="6"
+                    />
+
+                    <!-- Border gap: frame between the block edge and the chairs -->
+                    @if (dim === 'borderGap') {
+                      <path class="afd__zone afd__zone--active" fill-rule="evenodd" [attr.d]="g.borderPath" />
+                    }
+
+                    <!-- Row gap: strip between the two rows -->
+                    @if (dim === 'rowGap') {
+                      <rect
+                        class="afd__zone afd__zone--active"
+                        [attr.x]="g.rowStrip.x" [attr.y]="g.rowStrip.y"
+                        [attr.width]="g.rowStrip.w" [attr.height]="g.rowStrip.h"
+                      />
+                    }
+
+                    <!-- Seat spacing: strips between chairs in a row -->
+                    @if (dim === 'seatGap') {
+                      <g class="afd__zone afd__zone--active">
+                        @for (strip of g.seatStrips; track $index) {
+                          <rect [attr.x]="strip.x" [attr.y]="strip.y" [attr.width]="strip.w" [attr.height]="strip.h" />
+                        }
+                      </g>
+                    }
+
+                    <!-- Chairs (top-down view, back bar at the top) -->
+                    @for (chair of g.chairs; track $index) {
+                      <g
+                        class="afd__chair"
+                        [class.afd__chair--active]="
+                          (dim === 'chairWidth' && $index === 0) ||
+                          (dim === 'chairDepth' && $index === 1) ||
+                          dim === 'curve'
+                        "
+                      >
+                        <rect
+                          [attr.x]="chair.x" [attr.y]="chair.y"
+                          [attr.width]="g.chairW" [attr.height]="g.chairD"
+                          [attr.rx]="g.chairRx"
+                        />
+                        <rect
+                          class="afd__chair-back"
+                          [attr.x]="chair.x + g.backInsetX" [attr.y]="chair.y + g.backInsetY"
+                          [attr.width]="g.backW" [attr.height]="g.backH"
+                          [attr.rx]="g.backH / 2"
+                        />
+                      </g>
+                    }
+
+                    <!-- Chair width arrow (first chair) -->
+                    @if (dim === 'chairWidth') {
+                      <g class="afd__dim afd__dim--active">
+                        <line [attr.x1]="g.widthArrow.x1" [attr.y1]="g.widthArrow.y" [attr.x2]="g.widthArrow.x2" [attr.y2]="g.widthArrow.y" />
+                        <path [attr.d]="g.widthArrow.head1" />
+                        <path [attr.d]="g.widthArrow.head2" />
+                      </g>
+                    }
+
+                    <!-- Chair depth arrow (second chair) -->
+                    @if (dim === 'chairDepth') {
+                      <g class="afd__dim afd__dim--active">
+                        <line [attr.x1]="g.depthArrow.x" [attr.y1]="g.depthArrow.y1" [attr.x2]="g.depthArrow.x" [attr.y2]="g.depthArrow.y2" />
+                        <path [attr.d]="g.depthArrow.head1" />
+                        <path [attr.d]="g.depthArrow.head2" />
+                      </g>
+                    }
+
+                    <!-- Seat spacing ticks (first gap, top row) -->
+                    @if (dim === 'seatGap') {
+                      <g class="afd__dim afd__dim--active">
+                        <line [attr.x1]="g.seatTicks.x1" [attr.y1]="g.seatTicks.y" [attr.x2]="g.seatTicks.x2" [attr.y2]="g.seatTicks.y" />
+                        <line [attr.x1]="g.seatTicks.x1" [attr.y1]="g.seatTicks.y - 6" [attr.x2]="g.seatTicks.x1" [attr.y2]="g.seatTicks.y + 6" />
+                        <line [attr.x1]="g.seatTicks.x2" [attr.y1]="g.seatTicks.y - 6" [attr.x2]="g.seatTicks.x2" [attr.y2]="g.seatTicks.y + 6" />
+                      </g>
+                    }
+
+                    <!-- Row gap ticks (third column) -->
+                    @if (dim === 'rowGap') {
+                      <g class="afd__dim afd__dim--active">
+                        <line [attr.x1]="g.rowTicks.x" [attr.y1]="g.rowTicks.y1" [attr.x2]="g.rowTicks.x" [attr.y2]="g.rowTicks.y2" />
+                        <line [attr.x1]="g.rowTicks.x - 6" [attr.y1]="g.rowTicks.y1" [attr.x2]="g.rowTicks.x + 6" [attr.y2]="g.rowTicks.y1" />
+                        <line [attr.x1]="g.rowTicks.x - 6" [attr.y1]="g.rowTicks.y2" [attr.x2]="g.rowTicks.x + 6" [attr.y2]="g.rowTicks.y2" />
+                      </g>
+                    }
+
+                    <!-- Border gap ticks (left edge) -->
+                    @if (dim === 'borderGap') {
+                      <g class="afd__dim afd__dim--active">
+                        <line [attr.x1]="g.borderTicks.x1" [attr.y1]="g.borderTicks.y" [attr.x2]="g.borderTicks.x2" [attr.y2]="g.borderTicks.y" />
+                        <line [attr.x1]="g.borderTicks.x1" [attr.y1]="g.borderTicks.y - 6" [attr.x2]="g.borderTicks.x1" [attr.y2]="g.borderTicks.y + 6" />
+                        <line [attr.x1]="g.borderTicks.x2" [attr.y1]="g.borderTicks.y - 6" [attr.x2]="g.borderTicks.x2" [attr.y2]="g.borderTicks.y + 6" />
+                      </g>
+                    }
+
+                    <!-- Curve: bow through the front row of chairs -->
+                    @if (dim === 'curve') {
+                      <g class="afd__dim afd__dim--active">
+                        <path [attr.d]="g.curvePath" style="fill:none" stroke-dasharray="4 3" />
+                      </g>
+                    }
+                  </svg>
+                  <p class="afd__caption">
+                    <strong>{{ autoFillDimMeta[dim].label }}</strong> · {{ autoFillDimValue(dim) }}{{ dim === 'curve' ? '' : ' m' }} —
+                    {{ autoFillDimMeta[dim].desc }}
+                  </p>
+                </div>
+              }
+            }
+
+            @if (autoFillConfig().curveEnabled && workspaceBlockSeatCount() > 0) {
+              <label
+                class="block-workspace-panel__field afd-field"
+                [class.afd-field--active]="activeAutoFillDim() === 'curve'"
+                (mouseenter)="setAutoFillDimHover('curve', $event)"
+                (mouseleave)="clearAutoFillDimHover('curve')"
+              >
+                <span class="block-workspace-panel__label">Curve</span>
+                <div class="block-workspace-panel__ga-side-length-row">
+                  <button
+                    type="button"
+                    class="insp__step block-workspace-panel__ga-side-step"
+                    aria-label="Decrease curve"
+                    (pointerdown)="onCurveStepDown(-1, $event)"
+                    (pointerup)="onCurveStepUp($event)"
+                    (pointercancel)="onCurveStepUp($event)"
+                    (click)="$event.stopPropagation()"
+                  >−</button>
+                  <input
+                    type="number"
+                    [min]="autoFillCurveMin"
+                    [max]="autoFillCurveMax"
+                    step="1"
+                    class="block-workspace-panel__input block-workspace-panel__input--no-spin"
+                    [ngModel]="autoFillDimValue('curve')"
+                    (ngModelChange)="updateAutoFillConfig({ curveDeg: parseNum($event) })"
+                    (focus)="setAutoFillDimFocus('curve', $event)"
+                    (blur)="clearAutoFillDimFocus('curve')"
+                  />
+                  <button
+                    type="button"
+                    class="insp__step block-workspace-panel__ga-side-step"
+                    aria-label="Increase curve"
+                    (pointerdown)="onCurveStepDown(1, $event)"
+                    (pointerup)="onCurveStepUp($event)"
+                    (pointercancel)="onCurveStepUp($event)"
+                    (click)="$event.stopPropagation()"
+                  >+</button>
+                </div>
+              </label>
+            }
+
+            <div class="block-workspace-panel__field seat-start" [class.seat-start--unset]="!seatStartSideChosen()">
+              <span class="block-workspace-panel__label" id="afd-label-seatStart">Seat numbers start from</span>
+              <div class="seat-start__options" role="radiogroup" aria-labelledby="afd-label-seatStart">
+                <button
+                  type="button"
+                  role="radio"
+                  class="seat-start__option"
+                  [class.seat-start__option--on]="seatStartSide() === 'left'"
+                  [attr.aria-checked]="seatStartSide() === 'left'"
+                  (click)="setSeatStartSide('left')"
+                >
+                  <span class="seat-start__glyph" aria-hidden="true">1 2 3 →</span>
+                  <span>Left</span>
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  class="seat-start__option"
+                  [class.seat-start__option--on]="seatStartSide() === 'right'"
+                  [attr.aria-checked]="seatStartSide() === 'right'"
+                  (click)="setSeatStartSide('right')"
+                >
+                  <span class="seat-start__glyph" aria-hidden="true">← 3 2 1</span>
+                  <span>Right</span>
+                </button>
+              </div>
+              <p class="block-workspace-panel__hint" style="margin:0.25rem 0 0;">
+                @if (seatStartSideChosen()) {
+                  Seat 1 sits on the spectator's {{ seatStartSide() }} when facing the VIEW POINT. Changing it renumbers placed seats in place.
+                } @else {
+                  <strong>Choose before Create seats.</strong> Seen from a spectator facing the VIEW POINT — currently seat 1 is on the {{ seatStartSide() }}.
+                }
+              </p>
+            </div>
+
+            <div
+              class="block-workspace-panel__btn-row"
+              style="margin-top:0.75rem; align-items:center; justify-content:space-between; gap:0.35rem;"
+            >
+              <span class="block-workspace-panel__label" style="margin:0;">Aisles</span>
+              <div style="display:flex; gap:0.35rem;">
+                <button
+                  type="button"
+                  class="insp__btn insp__btn--ghost"
+                  style="min-width:2rem; padding:0.25rem 0.55rem; font-size:1.1rem; line-height:1;"
+                  title="Add another aisle"
+                  (click)="addAutoFillAisle()"
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  class="insp__btn insp__btn--ghost"
+                  style="padding:0.25rem 0.55rem; font-size:0.78rem; line-height:1.2;"
+                  title="Draw a custom aisle on the block"
+                  (click)="addDrawAisle()"
+                >
+                  Draw aisle
+                </button>
+              </div>
+            </div>
+            @for (aisle of autoFillAisles(); track aisle.id || $index; let aisleIndex = $index) {
+              <div style="margin-top:0.65rem; padding-top:0.35rem; border-top:1px solid #e2e8f0;">
+                <div
+                  class="block-workspace-panel__btn-row"
+                  style="align-items:center; justify-content:space-between; gap:0.35rem;"
+                >
+                  <span class="block-workspace-panel__label" style="margin:0;">Aisle {{ aisleIndex + 1 }}</span>
+                  <button
+                    type="button"
+                    class="insp__btn insp__btn--ghost"
+                    style="min-width:2rem; padding:0.2rem 0.45rem; line-height:1;"
+                    title="Remove aisle"
+                    (click)="removeAutoFillAisle(aisleIndex)"
+                  >
+                    ×
+                  </button>
+                </div>
+                <label class="block-workspace-panel__field">
+                  <span class="block-workspace-panel__label">Type</span>
+                  <select
+                    class="block-workspace-panel__input"
+                    [ngModel]="aisle.type"
+                    (ngModelChange)="updateAutoFillAisle(aisleIndex, { type: $event })"
+                  >
+                    <option value="none">Select aisle type</option>
+                    <option value="row">By row</option>
+                    <option value="column">By column</option>
+                    <option value="center">Center aisle</option>
+                    <option value="draw">Draw aisle</option>
+                  </select>
+                </label>
+                @if (aisle.type === 'row') {
+                  <label class="block-workspace-panel__field">
+                    <span class="block-workspace-panel__label">Aisle rows</span>
+                    <input
+                      type="text"
+                      class="block-workspace-panel__input"
+                      placeholder="C or C, E"
+                      [ngModel]="aisle.rows ?? ''"
+                      (ngModelChange)="updateAutoFillAisle(aisleIndex, { rows: $event })"
+                    />
+                  </label>
+                }
+                @if (aisle.type === 'column') {
+                  <label class="block-workspace-panel__field">
+                    <span class="block-workspace-panel__label">Aisle columns</span>
+                    <input
+                      type="text"
+                      class="block-workspace-panel__input"
+                      placeholder="1 or 1, 5"
+                      [ngModel]="aisle.columns ?? ''"
+                      (ngModelChange)="updateAutoFillAisle(aisleIndex, { columns: $event })"
+                    />
+                  </label>
+                }
+                @if (aisle.type === 'draw') {
+                  <p class="block-workspace-panel__status" style="margin:0.35rem 0 0.15rem;">
+                    @if (isDrawingAisle(aisle.id)) {
+                      {{ drawAislePrompt() }}
+                    } @else if (aisle.drawStart && aisle.drawEnd) {
+                      Custom aisle on block — drag the dots to move, or redraw to replace.
+                    } @else {
+                      Click two points on the block, then set width. Seats fill the remaining space.
+                    }
+                  </p>
+                  <div class="block-workspace-panel__btn-row" style="gap:0.35rem; margin-top:0.35rem;">
+                    <button
+                      type="button"
+                      class="insp__btn insp__btn--ghost"
+                      style="padding:0.25rem 0.55rem; font-size:0.78rem;"
+                      (click)="startDrawAisle(aisle.id, !!(aisle.drawStart && aisle.drawEnd))"
+                    >
+                      {{ aisle.drawStart && aisle.drawEnd ? 'Redraw' : 'Click two points' }}
+                    </button>
+                  </div>
+                }
+                @if (aisle.type === 'center') {
+                  <div class="block-workspace-panel__field">
+                    <span class="block-workspace-panel__label">Center on</span>
+                    <div class="block-workspace-panel__btn-row" style="gap:0.75rem; margin-top:0.25rem;">
+                      <label style="display:flex; align-items:center; gap:0.35rem; font-size:0.8rem; cursor:pointer;">
+                        <input
+                          type="radio"
+                          [name]="'center-axis-' + aisleIndex"
+                          [checked]="(aisle.centerAxis ?? 'column') === 'column'"
+                          (change)="updateAutoFillAisle(aisleIndex, { centerAxis: 'column' })"
+                        />
+                        Column
+                      </label>
+                      <label style="display:flex; align-items:center; gap:0.35rem; font-size:0.8rem; cursor:pointer;">
+                        <input
+                          type="radio"
+                          [name]="'center-axis-' + aisleIndex"
+                          [checked]="aisle.centerAxis === 'row'"
+                          (change)="updateAutoFillAisle(aisleIndex, { centerAxis: 'row' })"
+                        />
+                        Row
+                      </label>
+                    </div>
+                  </div>
+                }
+                @if (aisle.type !== 'none') {
+                  <label class="block-workspace-panel__field">
+                    <span class="block-workspace-panel__label">Aisle width (m)</span>
+                    <input
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      class="block-workspace-panel__input"
+                      [ngModel]="aisle.widthM ?? 1"
+                      (ngModelChange)="updateAutoFillAisle(aisleIndex, { widthM: parseNum($event) })"
+                    />
+                  </label>
+                }
+              </div>
+            }
+
+            <div class="block-workspace-panel__autofill-actions">
+              <button
+                type="button"
+                class="insp__btn insp__btn--primary insp__btn--block"
+                (click)="createSeatsForWorkspaceBlock()"
+              >
+                Create seats
+              </button>
+              <button
+                type="button"
+                class="insp__btn insp__btn--ghost insp__btn--block"
+                (click)="proceedToEditBlock()"
+              >
+                Add seats by editing block
+              </button>
+              <button
+                type="button"
+                class="insp__btn insp__btn--primary insp__btn--block"
+                (click)="startAutoFillLayout()"
+              >
+                Auto Fill
+              </button>
+            </div>
+            @if (workspaceBlockSeatCount() > 0) {
+              <p class="block-workspace-panel__status">
+                {{ workspaceBlockSeatCount() }} seat{{ workspaceBlockSeatCount() === 1 ? '' : 's' }} on this block
+              </p>
+            }
+          </section>
+        }
+
+        @if (showDiningConfigureChoiceSection()) {
+          <section class="block-workspace-panel__autofill">
+            <h4 class="designer-panel__subtitle" style="margin-top:1rem;">Add tables</h4>
+            <p class="block-workspace-panel__hint">
+              Measurements saved. Continue to edit this block and place tables with the dining tools.
+            </p>
+            <div class="block-workspace-panel__autofill-actions">
+              <button
+                type="button"
+                class="insp__btn insp__btn--primary insp__btn--block"
+                (click)="proceedToEditBlock()"
+              >
+                Add tables by editing block
+              </button>
+            </div>
+          </section>
+        }
+      </section>
+    }
+
+    @if (showSeatingTools()) {
+      <div class="block-workspace-panel__tools">
+        @if (confirmedViewpointSideLabel(); as vpSide) {
+          <p class="block-workspace-panel__status">
+            VIEW POINT on <strong>{{ vpSide }}</strong> · green edge on canvas
+          </p>
+        }
+        @if (progress().activeStep === 'edit' && progress().completed.configure) {
+          <button type="button" class="block-workspace-panel__step-back" (click)="goBackStep()">
+            ← Back to configure block
+          </button>
+        }
+        <h3 class="designer-panel__subtitle">Step 4 — Edit block (add seats)</h3>
+        <app-inspector-panel variant="seating-sidebar" />
+      </div>
+    }
+
+    @if (showDiningTools()) {
+      <div class="block-workspace-panel__tools">
+        @if (confirmedViewpointSideLabel(); as vpSide) {
+          <p class="block-workspace-panel__status">
+            VIEW POINT on <strong>{{ vpSide }}</strong> · green edge on canvas
+          </p>
+        }
+        @if (progress().activeStep === 'edit' && progress().completed.configure) {
+          <button type="button" class="block-workspace-panel__step-back" (click)="goBackStep()">
+            ← Back to configure block
+          </button>
+        }
+        <h3 class="designer-panel__subtitle">Step 4 — Edit block (add tables)</h3>
+        <app-inspector-panel variant="dining-sidebar" />
+      </div>
+    }
+
+    @if (showEditingTools()) {
+      <section class="block-workspace-panel__save">
+        @if (progress().activeStep === 'save' && progress().completed.edit) {
+          <button type="button" class="block-workspace-panel__step-back" (click)="goBackStep()">
+            ← Back to edit block
+          </button>
+        }
+        <h3 class="designer-panel__subtitle">Step 5 — Save configuration</h3>
+        <label class="block-workspace-panel__field">
+          <span class="block-workspace-panel__label">Configuration name</span>
+          <input
+            type="text"
+            class="block-workspace-panel__input"
+            placeholder="e.g. Lower tier curved block"
+            [ngModel]="saveConfigName()"
+            (ngModelChange)="saveConfigName.set($event)"
+          />
+        </label>
+        <button type="button" class="insp__btn insp__btn--primary insp__btn--block" (click)="saveCurrentConfig()">
+          Save layout
+        </button>
+        <p class="block-workspace-panel__hint">
+          Reuse this layout on other {{ blockTypeLabel(blockType) }} blocks from the dropdown above.
+        </p>
+      </section>
+    }
+
+    @if (blockTypeHasGaFlow(blockType) && gaMaxParticipantsStep()) {
+        <!-- GA Step 3: Set max participants -->
+        <section class="block-workspace-panel__viewpoint">
+          <button type="button" class="block-workspace-panel__step-back" (click)="gaBackToSides()">
+            ← Back to configure sides
+          </button>
+          <h3 class="designer-panel__subtitle">Step 3 — Maximum Participants</h3>
+          <p class="block-workspace-panel__hint">
+            Enter the maximum number of people this General Admission zone can hold.
+            This count is used for ticket sales — no seats are assigned individually.
+          </p>
+          <label class="block-workspace-panel__field">
+            <span class="block-workspace-panel__label">Maximum participants</span>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              class="block-workspace-panel__input"
+              placeholder="e.g. 500"
+              [ngModel]="gaDraftMaxParticipants()"
+              (ngModelChange)="gaDraftMaxParticipants.set(+$event || null)"
+            />
+            <span class="block-workspace-panel__hint">
+              Tickets sold for this block will be capped at this number.
+            </span>
+          </label>
+          <label class="block-workspace-panel__field" style="margin-top:0.75rem;">
+            <span class="block-workspace-panel__label">Layout name <em style="font-style:normal;opacity:0.6;">(optional)</em></span>
+            <input
+              type="text"
+              class="block-workspace-panel__input"
+              placeholder="e.g. GA Floor Zone"
+              [ngModel]="gaConfigName()"
+              (ngModelChange)="gaConfigName.set($event)"
+            />
+            <span class="block-workspace-panel__hint">
+              Name this config to reuse it on other General Admission blocks.
+            </span>
+          </label>
+          <button
+            type="button"
+            class="insp__btn insp__btn--primary insp__btn--block"
+            style="margin-top:0.75rem;"
+            (click)="gaSaveMaxParticipants()"
+          >
+            Save &amp; finish
+          </button>
+        </section>
+    }
+
+    @if (!showViewpointStep() && !showSideLabelConfigureStep() && !blockTypeHasTools(blockType)) {
+      <div class="block-workspace-panel__unavailable">
+        <p class="block-workspace-panel__unavailable-title">Not available</p>
+        <p class="block-workspace-panel__hint">
+          Customization tools for {{ blockTypeLabel(blockType) }} are coming soon.
+        </p>
+      </div>
+    }
+  } @else {
+    <p class="block-workspace-panel__hint block-workspace-panel__hint--spaced">
+      Select a block type to begin. For seating or dining blocks you will set VIEW POINT first, then label each side.
+    </p>
+  }
+</div>

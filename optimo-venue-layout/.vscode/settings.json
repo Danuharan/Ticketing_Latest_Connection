@@ -1,0 +1,10 @@
+{
+  "css.customData": [".vscode/css-custom-data.json"],
+  "css.lint.unknownAtRules": "ignore",
+  "scss.lint.unknownAtRules": "ignore",
+  "files.associations": {
+    "tailwind.css": "tailwindcss"
+  },
+  "deno.enable": true,
+  "deno.enablePaths": ["supabase/functions"]
+}

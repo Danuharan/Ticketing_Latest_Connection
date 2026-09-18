@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 360" width="480" height="360">
+  <!-- Borderless dining floor-plan sample: tables + chairs + entrance only -->
+  <rect width="480" height="360" fill="#ffffff"/>
+
+  <!-- Head / banquet table (rectangular) -->
+  <rect x="148" y="48" width="184" height="26" rx="3" fill="#1a1a1a"/>
+  <g fill="#1a1a1a">
+    <circle cx="168" cy="30" r="4.5"/>
+    <circle cx="192" cy="30" r="4.5"/>
+    <circle cx="216" cy="30" r="4.5"/>
+    <circle cx="240" cy="30" r="4.5"/>
+    <circle cx="264" cy="30" r="4.5"/>
+    <circle cx="288" cy="30" r="4.5"/>
+  </g>
+
+  <!-- Round guest tables — 3 / 2 / 3 grid; chairs gapped so ink stays separate -->
+  <g transform="translate(100,118)">
+    <circle r="18" fill="#1a1a1a"/>
+    <g fill="#1a1a1a">
+      <circle cx="0" cy="-36" r="4"/><circle cx="25" cy="-25" r="4"/><circle cx="36" cy="0" r="4"/><circle cx="25" cy="25" r="4"/>
+      <circle cx="0" cy="36" r="4"/><circle cx="-25" cy="25" r="4"/><circle cx="-36" cy="0" r="4"/><circle cx="-25" cy="-25" r="4"/>
+    </g>
+  </g>
+  <g transform="translate(240,118)">
+    <circle r="18" fill="#1a1a1a"/>
+    <g fill="#1a1a1a">
+      <circle cx="0" cy="-36" r="4"/><circle cx="25" cy="-25" r="4"/><circle cx="36" cy="0" r="4"/><circle cx="25" cy="25" r="4"/>
+      <circle cx="0" cy="36" r="4"/><circle cx="-25" cy="25" r="4"/><circle cx="-36" cy="0" r="4"/><circle cx="-25" cy="-25" r="4"/>
+    </g>
+  </g>
+  <g transform="translate(380,118)">
+    <circle r="18" fill="#1a1a1a"/>
+    <g fill="#1a1a1a">
+      <circle cx="0" cy="-36" r="4"/><circle cx="25" cy="-25" r="4"/><circle cx="36" cy="0" r="4"/><circle cx="25" cy="25" r="4"/>
+      <circle cx="0" cy="36" r="4"/><circle cx="-25" cy="25" r="4"/><circle cx="-36" cy="0" r="4"/><circle cx="-25" cy="-25" r="4"/>
+    </g>
+  </g>
+
+  <g transform="translate(170,200)">
+    <circle r="18" fill="#1a1a1a"/>
+    <g fill="#1a1a1a">
+      <circle cx="0" cy="-36" r="4"/><circle cx="25" cy="-25" r="4"/><circle cx="36" cy="0" r="4"/><circle cx="25" cy="25" r="4"/>
+      <circle cx="0" cy="36" r="4"/><circle cx="-25" cy="25" r="4"/><circle cx="-36" cy="0" r="4"/><circle cx="-25" cy="-25" r="4"/>
+    </g>
+  </g>
+  <g transform="translate(310,200)">
+    <circle r="18" fill="#1a1a1a"/>
+    <g fill="#1a1a1a">
+      <circle cx="0" cy="-36" r="4"/><circle cx="25" cy="-25" r="4"/><circle cx="36" cy="0" r="4"/><circle cx="25" cy="25" r="4"/>
+      <circle cx="0" cy="36" r="4"/><circle cx="-25" cy="25" r="4"/><circle cx="-36" cy="0" r="4"/><circle cx="-25" cy="-25" r="4"/>
+    </g>
+  </g>
+
+  <g transform="translate(100,282)">
+    <circle r="18" fill="#1a1a1a"/>
+    <g fill="#1a1a1a">
+      <circle cx="0" cy="-36" r="4"/><circle cx="25" cy="-25" r="4"/><circle cx="36" cy="0" r="4"/><circle cx="25" cy="25" r="4"/>
+      <circle cx="0" cy="36" r="4"/><circle cx="-25" cy="25" r="4"/><circle cx="-36" cy="0" r="4"/><circle cx="-25" cy="-25" r="4"/>
+    </g>
+  </g>
+  <g transform="translate(240,282)">
+    <circle r="18" fill="#1a1a1a"/>
+    <g fill="#1a1a1a">
+      <circle cx="0" cy="-36" r="4"/><circle cx="25" cy="-25" r="4"/><circle cx="36" cy="0" r="4"/><circle cx="25" cy="25" r="4"/>
+      <circle cx="0" cy="36" r="4"/><circle cx="-25" cy="25" r="4"/><circle cx="-36" cy="0" r="4"/><circle cx="-25" cy="-25" r="4"/>
+    </g>
+  </g>
+  <g transform="translate(380,282)">
+    <circle r="18" fill="#1a1a1a"/>
+    <g fill="#1a1a1a">
+      <circle cx="0" cy="-36" r="4"/><circle cx="25" cy="-25" r="4"/><circle cx="36" cy="0" r="4"/><circle cx="25" cy="25" r="4"/>
+      <circle cx="0" cy="36" r="4"/><circle cx="-25" cy="25" r="4"/><circle cx="-36" cy="0" r="4"/><circle cx="-25" cy="-25" r="4"/>
+    </g>
+  </g>
+
+  <!-- Arrow / entrance glyph → detected as EXIT in the dining block -->
+  <g transform="translate(432,200)">
+    <polygon points="0,-16 28,0 0,16" fill="#1a1a1a"/>
+    <rect x="-12" y="-7" width="12" height="14" fill="#1a1a1a"/>
+  </g>
+</svg>

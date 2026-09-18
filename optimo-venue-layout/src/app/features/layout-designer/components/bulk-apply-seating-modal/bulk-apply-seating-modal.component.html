@@ -1,0 +1,191 @@
+@if (prompt(); as data) {
+
+  <div class="bulk-apply-modal__backdrop" (click)="onBackdropClick($event)">
+
+    <div
+
+      class="bulk-apply-modal"
+
+      role="dialog"
+
+      aria-modal="true"
+
+      aria-labelledby="bulk-apply-modal-title"
+
+      (click)="$event.stopPropagation()"
+
+    >
+
+      <header class="bulk-apply-modal__head">
+
+        <h2 id="bulk-apply-modal-title" class="bulk-apply-modal__title">
+
+          Apply seating to similar blocks?
+
+        </h2>
+
+        <p class="bulk-apply-modal__intro">
+
+          Matched by same tier (<strong>{{ data.sourceTierLabel }}</strong>),
+
+          shape / size, and ground-facing edge
+
+          (<strong>{{ data.candidates[0]?.shapeFamily ?? 'same shape' }}</strong>).
+
+          Seats will be placed on each selected block the same way as manual setup for
+
+          <strong>{{ data.sourceLabel }}</strong>.
+
+        </p>
+
+      </header>
+
+
+
+      @if (selectableCandidates().length > 0) {
+
+        <div class="bulk-apply-modal__toolbar">
+
+          <button type="button" class="bulk-apply-modal__link" (click)="toggleSelectAll()">
+
+            {{ allSelected() ? 'Deselect all' : 'Select all' }}
+
+          </button>
+
+          <span class="bulk-apply-modal__count">{{ selectedCount() }} selected</span>
+
+        </div>
+
+
+
+        <ul class="bulk-apply-modal__list">
+
+          @for (candidate of selectableCandidates(); track candidate.id) {
+
+            <li class="bulk-apply-modal__row">
+
+              <label class="bulk-apply-modal__label">
+
+                <input
+
+                  type="checkbox"
+
+                  [checked]="isChecked(candidate.id)"
+
+                  (change)="toggleCandidate(candidate.id, $any($event.target).checked)"
+
+                />
+
+                <span
+
+                  class="bulk-apply-modal__thumb"
+
+                  [innerHTML]="previewSvg(candidate.locationPreviewSvg)"
+
+                ></span>
+
+                <span class="bulk-apply-modal__block-text">
+
+                  <span class="bulk-apply-modal__block-name">{{ candidate.label }}</span>
+
+                  <span class="bulk-apply-modal__block-meta">
+
+                    {{ candidate.tierLabel }} · {{ candidate.shapeSummary }}
+
+                  </span>
+
+                </span>
+
+              </label>
+
+            </li>
+
+          }
+
+        </ul>
+
+      }
+
+
+
+      @if (skippedCandidates().length > 0) {
+
+        <section class="bulk-apply-modal__skipped">
+
+          <h3 class="bulk-apply-modal__skipped-title">Skipped blocks</h3>
+
+          <ul class="bulk-apply-modal__skipped-list">
+
+            @for (candidate of skippedCandidates(); track candidate.id) {
+
+              <li class="bulk-apply-modal__skipped-item">
+
+                <span
+
+                  class="bulk-apply-modal__thumb bulk-apply-modal__thumb--small"
+
+                  [innerHTML]="previewSvg(candidate.locationPreviewSvg)"
+
+                ></span>
+
+                <span>
+
+                  {{ candidate.label }} · {{ candidate.tierLabel }} · {{ candidate.shapeSummary }}
+
+                  @if (candidate.skipReason === 'ground-edge-shorter') {
+
+                    · ground-facing side shorter
+
+                  } @else {
+
+                    · already has seating
+
+                  }
+
+                </span>
+
+              </li>
+
+            }
+
+          </ul>
+
+        </section>
+
+      }
+
+
+
+      <footer class="bulk-apply-modal__actions">
+
+        <button type="button" class="insp__btn insp__btn--ghost" (click)="skip()">
+
+          Skip — back to layout
+
+        </button>
+
+        <button
+
+          type="button"
+
+          class="insp__btn insp__btn--primary"
+
+          [disabled]="selectedCount() === 0"
+
+          (click)="apply()"
+
+        >
+
+          Apply to {{ selectedCount() }} block{{ selectedCount() === 1 ? '' : 's' }}
+
+        </button>
+
+      </footer>
+
+    </div>
+
+  </div>
+
+}
+
+

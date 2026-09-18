@@ -1,0 +1,8 @@
+{
+  "css.customData": ["optimo-venue-layout/.vscode/css-custom-data.json"],
+  "css.lint.unknownAtRules": "ignore",
+  "scss.lint.unknownAtRules": "ignore",
+  "files.associations": {
+    "tailwind.css": "tailwindcss"
+  }
+}

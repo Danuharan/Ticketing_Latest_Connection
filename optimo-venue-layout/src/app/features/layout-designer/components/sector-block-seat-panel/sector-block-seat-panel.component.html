@@ -1,0 +1,116 @@
+<section class="insp__section insp__section--nested">
+  <div class="insp__section-head">
+    <h4 class="insp__subhead-title">Seat layout</h4>
+    <span class="insp__badge insp__badge--blue">{{ seatCount() }} seats</span>
+  </div>
+
+  @if (!compact()) {
+    <div class="insp__row insp__row--align-end">
+      <label class="insp__field insp__field--grow">
+        <span class="insp__label">Seats to add</span>
+        <input class="insp__input" type="number" min="1" max="20" [ngModel]="seatsToAdd()" (ngModelChange)="seatsToAdd.set(num($event))" />
+      </label>
+      <button type="button" class="insp__mini insp__mini--pad" (click)="addSeats()">Add</button>
+    </div>
+    <p class="insp__foot">Adds seats to every row at once.</p>
+  }
+
+  <div class="insp__row">
+    <label class="insp__field">
+      <span class="insp__label">Rows</span>
+      <input class="insp__input" type="number" min="1" max="50" [ngModel]="layout().rows" (ngModelChange)="resizeRows(num($event))" />
+    </label>
+    <label class="insp__field">
+      <span class="insp__label">Default seats</span>
+      <input class="insp__input" type="number" min="1" max="100" [ngModel]="layout().seatsPerRow" (ngModelChange)="updateDefaultSeatsPerRow(num($event))" />
+    </label>
+  </div>
+
+  <label class="insp__field">
+    <span class="insp__label">Row label style</span>
+    <select class="insp__input" [ngModel]="layout().rowLabelStyle ?? 'letter'" (ngModelChange)="patchLayout({ rowLabelStyle: $event })">
+      <option value="letter">Letters (A, B, C …)</option>
+      <option value="number">Numbers (1, 2, 3 …)</option>
+    </select>
+  </label>
+
+  <label class="insp__check">
+    <input type="checkbox" [ngModel]="layout().showSeatNumbers !== false" (ngModelChange)="patchLayout({ showSeatNumbers: $event })" />
+    <span>Show seat numbers</span>
+  </label>
+  <p class="insp__foot">When off, seat numbers are hidden on the seat tiles.</p>
+
+  <div class="insp__subhead">
+    <span>Per-row seat counts</span>
+    <span class="insp__badge insp__badge--muted">{{ layout().rows }} rows</span>
+  </div>
+  <p class="insp__foot">Set a row to <code>0</code> to hide its label and seat numbers without deleting the row.</p>
+  <div class="insp__rowseat-list">
+    @for (count of rowSeatCounts(); track $index; let i = $index) {
+      <div class="insp__rowseat-card">
+        <div class="insp__rowseat-title">Row {{ rowLabelAt(i) }}</div>
+        <label class="insp__field">
+          <span class="insp__label">Seats</span>
+          <input class="insp__input" type="number" min="0" max="100" [ngModel]="count" (ngModelChange)="updateRowSeatCount(i, num($event))" />
+        </label>
+        <div class="insp__row">
+          <label class="insp__field insp__field--grow">
+            <span class="insp__label">X offset (%)</span>
+            <input class="insp__input" type="number" step="0.5" [ngModel]="rowOffsetXPcts()[i]" (ngModelChange)="updateRowOffset(i, 'x', num($event))" />
+          </label>
+          <label class="insp__field insp__field--grow">
+            <span class="insp__label">Y offset (%)</span>
+            <input class="insp__input" type="number" step="0.5" [ngModel]="rowOffsetYPcts()[i]" (ngModelChange)="updateRowOffset(i, 'y', num($event))" />
+          </label>
+        </div>
+      </div>
+    }
+  </div>
+
+  <label class="insp__field">
+    <span class="insp__label">Aisles after seat numbers</span>
+    <input class="insp__input" type="text" [ngModel]="aisleValue()" (ngModelChange)="setAisles($event)" placeholder="4, 8" />
+    <span class="insp__foot">Comma-separated seat numbers — adds a visible gap after each in every row.</span>
+  </label>
+
+  <label class="insp__field">
+    <span class="insp__label">Hidden seats</span>
+    <input class="insp__input" type="text" [ngModel]="hiddenSeatsValue()" (ngModelChange)="setHiddenSeats($event)" placeholder="A5, B5" />
+    <span class="insp__foot">Comma-separated seat ids to hide from this block.</span>
+  </label>
+
+  @if (!compact()) {
+    <div class="insp__seat-preview">
+      <div class="insp__seat-preview-head">
+        <span class="insp__subhead-title">Seat preview</span>
+        <span class="insp__foot">{{ block().label?.trim() || block().code }} · {{ seatCount() }} seats</span>
+      </div>
+      <svg class="insp__seat-preview-svg" [attr.viewBox]="preview().viewBox" preserveAspectRatio="xMidYMid meet">
+        <path [attr.d]="preview().path" [attr.fill]="block().fillColor || 'rgba(243,232,255,0.9)'" stroke="#cbd5e1" stroke-width="1" />
+        @for (label of preview().map.rowLabels; track label.key) {
+          <text
+            [attr.x]="label.x"
+            [attr.y]="label.y"
+            text-anchor="middle"
+            dominant-baseline="middle"
+            font-size="7"
+            font-weight="700"
+            fill="#64748b"
+          >{{ label.label }}</text>
+        }
+        @for (seat of preview().map.seats; track seat.key) {
+          @if (seatChairPreview(seat); as chair) {
+            <svg:g
+              appSeatChairGraphic
+              [x]="chair.x"
+              [y]="chair.y"
+              [scale]="chair.scale"
+              [labelText]="chair.labelText"
+              [showLabels]="chair.showLabels"
+            />
+          }
+        }
+      </svg>
+    </div>
+  }
+</section>

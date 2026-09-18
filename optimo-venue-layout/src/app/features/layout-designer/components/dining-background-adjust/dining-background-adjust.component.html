@@ -1,0 +1,156 @@
+<div class="dining-bg-adjust__backdrop" (click)="cancel()">
+  <div
+    class="dining-bg-adjust"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="dining-bg-adjust-title"
+    (click)="$event.stopPropagation()"
+  >
+    <header class="dining-bg-adjust__head">
+      <h3 id="dining-bg-adjust-title" class="dining-bg-adjust__title">Adjust Block Background</h3>
+      <p class="dining-bg-adjust__intro">
+        The block shape stays fixed. Drag, zoom, or rotate the image underneath it — only the area inside the outline will be used.
+      </p>
+    </header>
+
+    <div class="dining-bg-adjust__stage-wrap">
+      @let layout = preview();
+      <div
+        class="dining-bg-adjust__stage"
+        [style.width.px]="layout.outerWidth"
+        [style.height.px]="layout.outerHeight"
+        (pointerdown)="onPointerDown($event)"
+        (pointermove)="onPointerMove($event)"
+        (pointerup)="onPointerUp()"
+        (pointercancel)="onPointerUp()"
+        (wheel)="onWheel($event)"
+      >
+        <div
+          class="dining-bg-adjust__mask"
+          [style.left.px]="layout.rect.x"
+          [style.top.px]="layout.rect.y"
+          [style.width.px]="layout.rect.width"
+          [style.height.px]="layout.rect.height"
+          [style.clip-path]="layout.cssClip"
+        >
+          @if (imageStyle(); as imgStyle) {
+            <img
+              class="dining-bg-adjust__photo"
+              [src]="image().dataUrl"
+              [alt]="image().name || 'Block background'"
+              draggable="false"
+              [style.left]="imgStyle.left"
+              [style.top]="imgStyle.top"
+              [style.width]="imgStyle.width"
+              [style.height]="imgStyle.height"
+              [style.transform]="imgStyle.transform"
+            />
+          }
+        </div>
+
+        <svg
+          class="dining-bg-adjust__svg"
+          [attr.viewBox]="'0 0 ' + layout.outerWidth + ' ' + layout.outerHeight"
+          preserveAspectRatio="xMidYMid meet"
+        >
+          <path
+            class="dining-bg-adjust__veil"
+            [attr.d]="layout.overlayPath"
+            fill="rgba(15, 23, 42, 0.72)"
+            fill-rule="evenodd"
+            pointer-events="none"
+          />
+
+          @switch (layout.clipKind) {
+            @case ('ellipse') {
+              <ellipse
+                class="dining-bg-adjust__outline"
+                [attr.cx]="layout.ellipse.cx"
+                [attr.cy]="layout.ellipse.cy"
+                [attr.rx]="layout.ellipse.rx"
+                [attr.ry]="layout.ellipse.ry"
+                fill="none"
+                stroke="#93c5fd"
+                stroke-width="1.6"
+                pointer-events="none"
+              />
+            }
+            @case ('rect') {
+              <rect
+                class="dining-bg-adjust__outline"
+                [attr.x]="layout.rect.x"
+                [attr.y]="layout.rect.y"
+                [attr.width]="layout.rect.width"
+                [attr.height]="layout.rect.height"
+                [attr.rx]="layout.rectRx"
+                fill="none"
+                stroke="#93c5fd"
+                stroke-width="1.6"
+                pointer-events="none"
+              />
+            }
+            @case ('path') {
+              <path
+                class="dining-bg-adjust__outline"
+                [attr.d]="layout.pathD"
+                fill="none"
+                stroke="#93c5fd"
+                stroke-width="1.6"
+                stroke-linejoin="round"
+                pointer-events="none"
+              />
+            }
+            @default {
+              <polygon
+                class="dining-bg-adjust__outline"
+                [attr.points]="layout.polygonPoints"
+                fill="none"
+                stroke="#93c5fd"
+                stroke-width="1.6"
+                stroke-linejoin="round"
+                pointer-events="none"
+              />
+            }
+          }
+        </svg>
+        <span class="dining-bg-adjust__hint">Drag to move · scroll to zoom</span>
+      </div>
+    </div>
+
+    <div class="dining-bg-adjust__controls">
+      <label class="dining-bg-adjust__field">
+        <span>Zoom</span>
+        <input
+          type="range"
+          min="0.35"
+          max="4"
+          step="0.05"
+          [ngModel]="fit().scale"
+          (ngModelChange)="setScale(+$event)"
+        />
+      </label>
+      <div class="dining-bg-adjust__btn-row">
+        <button
+          type="button"
+          class="insp__btn insp__btn--ghost"
+          [class.dining-bg-adjust__btn--active]="isContainMode()"
+          (click)="fitContain()"
+        >Fit</button>
+        <button
+          type="button"
+          class="insp__btn insp__btn--ghost"
+          [class.dining-bg-adjust__btn--active]="isCoverMode()"
+          (click)="fitCover()"
+        >Fill</button>
+        <button type="button" class="insp__btn insp__btn--ghost" (click)="rotate(-90)">Rotate left</button>
+        <button type="button" class="insp__btn insp__btn--ghost" (click)="rotate(90)">Rotate right</button>
+        <button type="button" class="insp__btn insp__btn--ghost" (click)="reset()">Reset</button>
+      </div>
+    </div>
+
+    <footer class="dining-bg-adjust__actions">
+      <button type="button" class="insp__btn insp__btn--ghost" (click)="cancel()">Cancel</button>
+      <button type="button" class="insp__btn insp__btn--primary" (click)="apply()">Apply Background</button>
+    </footer>
+  </div>
+</div>

@@ -1,0 +1,2262 @@
+<svg
+  #svg
+  class="canvas-stage-svg"
+  [class.canvas-stage-svg--block-workspace]="inBlockWorkspace()"
+  [class.canvas-stage-svg--drawing]="isDrawing()"
+  [class.canvas-stage-svg--table-placing]="isTablePlacing()"
+  [class.canvas-stage-svg--tracing]="isColorDetecting()"
+  [class.canvas-stage-svg--dragging]="isMoveDragging()"
+  [class.canvas-stage-svg--access-placing]="isAccessPointPlacing()"
+  [class.canvas-stage-svg--access-placing-valid]="isAccessPointPlacing() && accessPointPlacementPreviewVm()"
+  [attr.viewBox]="svgViewBox()"
+  preserveAspectRatio="none"
+  (pointerdown)="onBackgroundPointerDown($event)"
+  (dblclick)="onDoubleClick($event)"
+  (auxclick)="$event.preventDefault()"
+>
+  <defs>
+    <pattern id="canvas-grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r="1" fill="#cbd5e1" opacity="0.55" />
+    </pattern>
+    <pattern id="aisle-stripes" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="10" height="10" fill="#e2e8f0" />
+      <line x1="0" y1="0" x2="0" y2="10" stroke="#cbd5e1" stroke-width="2" />
+    </pattern>
+    <linearGradient id="marble-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="35%" stop-color="#f5f5f5" />
+      <stop offset="85%" stop-color="#e8e8e8" />
+      <stop offset="100%" stop-color="#dedede" />
+    </linearGradient>
+    <pattern id="dining-stage-hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(40)">
+      <path d="M 0 0 L 0 8" stroke="#475569" stroke-width="0.7" opacity="0.16" />
+    </pattern>
+    <filter id="table-shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-color="#0a0a0a" flood-opacity="0.25" />
+    </filter>
+  </defs>
+
+  @if (referenceImageDraw(); as refDraw) {
+    <image
+      class="canvas-stage-reference"
+      [attr.href]="refDraw.href"
+      [attr.x]="refDraw.x"
+      [attr.y]="refDraw.y"
+      [attr.width]="refDraw.width"
+      [attr.height]="refDraw.height"
+      [attr.opacity]="refDraw.opacity"
+      preserveAspectRatio="none"
+      pointer-events="none"
+    />
+  }
+
+  <rect
+    class="canvas-stage-grid"
+    [class.canvas-stage-grid--with-reference]="referenceImageDraw()"
+    [attr.x]="gridBounds().x"
+    [attr.y]="gridBounds().y"
+    [attr.width]="gridBounds().width"
+    [attr.height]="gridBounds().height"
+    fill="url(#canvas-grid)"
+    pointer-events="none"
+  />
+
+  @for (vm of renderList(); track trackVm($index, vm)) {
+      <g
+        [attr.transform]="vm.transform"
+        [attr.data-element-id]="vm.el.id"
+        (pointerdown)="onElementPointerDown($event, vm.el)"
+        (dblclick)="onElementDoubleClick($event, vm.el)"
+        class="canvas-stage-el"
+        [class.canvas-stage-el--measure-target]="vm.el.id === arrangeByRowMeasureTargetId()"
+        [attr.pointer-events]="vm.el.id === arrangeByRowMeasureTargetId() ? 'none' : 'auto'"
+        [class.canvas-stage-el--muted]="isDrawing() || isColorDetecting()"
+      >
+        @switch (vm.el.type) {
+          @case ('centerpiece') {
+            @if (vm.diningLayoutReferenceImage; as refImg) {
+              @if (diningBackgroundVisible(refImg)) {
+                <defs>
+                  <clipPath [attr.id]="'dining-ref-clip-' + vm.el.id">
+                    @switch (vm.shapeMode) {
+                      @case ('ellipse') {
+                        <ellipse
+                          [attr.cx]="vm.rect.cx" [attr.cy]="vm.rect.cy"
+                          [attr.rx]="vm.rect.width / 2" [attr.ry]="vm.rect.height / 2"
+                        />
+                      }
+                      @case ('rect') {
+                        <rect
+                          [attr.x]="vm.rect.x" [attr.y]="vm.rect.y"
+                          [attr.width]="vm.rect.width" [attr.height]="vm.rect.height"
+                          [attr.rx]="vm.rectRx"
+                        />
+                      }
+                      @case ('path') {
+                        <path [attr.d]="vm.pathD" />
+                      }
+                      @default {
+                        <polygon [attr.points]="vm.pathD" />
+                      }
+                    }
+                  </clipPath>
+                </defs>
+                @if (diningBackgroundManualFit(refImg)) {
+                  @if (diningBackgroundDrawFor(vm, refImg); as draw) {
+                    <g
+                      class="canvas-stage-dining-ref"
+                      [attr.clip-path]="diningClipUrl(vm.el.id)"
+                      pointer-events="none"
+                    >
+                      <g [attr.transform]="draw.transform">
+                        <image
+                          [attr.href]="refImg.dataUrl"
+                          [attr.xlink:href]="refImg.dataUrl"
+                          [attr.width]="draw.width"
+                          [attr.height]="draw.height"
+                          [attr.opacity]="draw.opacity"
+                        />
+                      </g>
+                    </g>
+                  }
+                } @else if (diningReferenceAligned(refImg)) {
+                  <svg
+                    class="canvas-stage-dining-ref"
+                    [attr.x]="vm.rect.x"
+                    [attr.y]="vm.rect.y"
+                    [attr.width]="vm.rect.width"
+                    [attr.height]="vm.rect.height"
+                    [attr.viewBox]="diningReferenceViewBox(refImg)"
+                    preserveAspectRatio="none"
+                    overflow="hidden"
+                    [attr.opacity]="diningBackgroundOpacity(refImg)"
+                    [attr.clip-path]="diningClipUrl(vm.el.id)"
+                    pointer-events="none"
+                  >
+                    <image
+                      [attr.href]="refImg.dataUrl"
+                      [attr.xlink:href]="refImg.dataUrl"
+                      [attr.width]="refImg.imageWidth"
+                      [attr.height]="refImg.imageHeight"
+                    />
+                  </svg>
+                } @else {
+                  <image
+                    class="canvas-stage-dining-ref"
+                    [attr.href]="refImg.dataUrl"
+                    [attr.x]="vm.rect.x"
+                    [attr.y]="vm.rect.y"
+                    [attr.width]="vm.rect.width"
+                    [attr.height]="vm.rect.height"
+                    preserveAspectRatio="xMidYMid slice"
+                    [attr.opacity]="diningBackgroundOpacity(refImg)"
+                    [attr.clip-path]="diningClipUrl(vm.el.id)"
+                    [attr.xlink:href]="refImg.dataUrl"
+                    pointer-events="none"
+                  />
+                }
+              }
+            }
+            @switch (vm.shapeMode) {
+              @case ('ellipse') {
+                <ellipse
+                  [attr.cx]="vm.rect.cx" [attr.cy]="vm.rect.cy"
+                  [attr.rx]="vm.rect.width / 2" [attr.ry]="vm.rect.height / 2"
+                  [attr.fill]="vm.fill"
+                  [attr.fill-opacity]="diningBackgroundFillOpacity(vm.diningLayoutReferenceImage)"
+                  [attr.stroke]="vm.stroke" [attr.stroke-width]="vm.strokeWidth"
+                />
+              }
+              @case ('rect') {
+                <rect
+                  [attr.x]="vm.rect.x" [attr.y]="vm.rect.y"
+                  [attr.width]="vm.rect.width" [attr.height]="vm.rect.height" [attr.rx]="vm.rectRx"
+                  [attr.fill]="vm.fill"
+                  [attr.fill-opacity]="diningBackgroundFillOpacity(vm.diningLayoutReferenceImage)"
+                  [attr.stroke]="vm.stroke" [attr.stroke-width]="vm.strokeWidth"
+                />
+              }
+              @case ('path') {
+                <path
+                  [attr.d]="vm.pathD"
+                  [attr.fill]="vm.fill"
+                  [attr.fill-opacity]="diningBackgroundFillOpacity(vm.diningLayoutReferenceImage)"
+                  [attr.stroke]="vm.el.id === arrangeByRowMeasureTargetId() ? 'transparent' : vm.stroke"
+                  [attr.stroke-width]="vm.el.id === arrangeByRowMeasureTargetId() ? 0 : vm.strokeWidth"
+                  stroke-linejoin="round"
+                />
+              }
+              @case ('polygon') {
+                <polygon
+                  [attr.points]="vm.pathD"
+                  [attr.fill]="vm.fill"
+                  [attr.fill-opacity]="diningBackgroundFillOpacity(vm.diningLayoutReferenceImage)"
+                  [attr.stroke]="vm.el.id === arrangeByRowMeasureTargetId() ? 'transparent' : vm.stroke"
+                  [attr.stroke-width]="vm.el.id === arrangeByRowMeasureTargetId() ? 0 : vm.strokeWidth"
+                  stroke-linejoin="round"
+                />
+                @if (!inBlockWorkspace() && vm.el.type === 'centerpiece' && vm.shapeMode === 'polygon' && (vm.el.customPoints?.length ?? 0) >= 3) {
+                  <polygon
+                    class="canvas-stage-block-hit"
+                    [attr.data-element-id]="vm.el.id"
+                    [attr.points]="vm.pathD"
+                    fill="transparent"
+                    stroke="none"
+                    pointer-events="all"
+                  />
+                }
+              }
+            }
+            @if (vm.centerLabel; as l) {
+              <text
+                [attr.x]="l.x"
+                [attr.y]="l.y"
+                [attr.text-anchor]="l.anchor"
+                [attr.font-size]="l.fontSize"
+                [attr.font-weight]="l.weight"
+                [attr.fill]="l.color"
+                class="canvas-stage-text canvas-stage-block-label"
+                [class.canvas-stage-block-label--workspace]="inBlockWorkspace()"
+                [class.canvas-stage-block-label--draggable]="l.draggable"
+                [attr.pointer-events]="l.draggable ? 'all' : 'none'"
+                (pointerdown)="onBlockLabelPointerDown($event, l.elementId!)"
+              >{{ l.text }}</text>
+            }
+          }
+
+          @case ('layer-ring') {
+            <path
+              [attr.d]="vm.ringPath"
+              fill="none"
+              [attr.stroke]="vm.stroke"
+              [attr.stroke-width]="vm.strokeWidth"
+              fill-rule="evenodd"
+              pointer-events="stroke"
+              class="canvas-stage-ring-band"
+              (pointerdown)="onRingPointerDown($event, vm.el)"
+            />
+            @for (sector of vm.sectors; track trackSector($index, sector)) {
+              <g
+                class="canvas-stage-sector"
+                [class.canvas-stage-sector--selected]="sector.blockSelected"
+                (pointerdown)="onSectorPointerDown($event, vm.el, sector.id)"
+              >
+                <path
+                  [attr.d]="sector.path"
+                  [attr.fill]="sector.fill"
+                  fill-opacity="0.72"
+                  [attr.stroke]="sector.stroke"
+                  [attr.stroke-width]="sector.strokeWidth"
+                />
+                @for (seat of sector.seats; track trackSeat($index, seat)) {
+                  @if (seatChairView(seat, { showNumbers: seat.showNumber }); as chair) {
+                    <svg:g
+                      appSeatChairGraphic
+                      [x]="chair.x"
+                      [y]="chair.y"
+                      [scale]="chair.scale"
+                      [labelText]="chair.labelText"
+                      [showLabels]="chair.showLabels"
+                      pointer-events="none"
+                    />
+                  }
+                }
+                @for (rl of sector.rowLabels; track trackLabel($index, rl)) {
+                  <text [attr.x]="rl.x" [attr.y]="rl.y" text-anchor="middle" font-size="6" font-weight="700" [attr.fill]="vm.labelColor" class="canvas-stage-text" pointer-events="none">{{ rl.label }}</text>
+                }
+                <text [attr.x]="sector.labelX" [attr.y]="sector.labelY" text-anchor="middle" font-size="10" font-weight="700" [attr.fill]="vm.labelColor" class="canvas-stage-text" pointer-events="none">{{ sector.displayLabel }}</text>
+              </g>
+            }
+          }
+
+          @case ('layer-rect') {
+            <rect [attr.x]="vm.groundX" [attr.y]="vm.groundY" [attr.width]="vm.groundW" [attr.height]="vm.groundH" rx="6" [attr.fill]="vm.fill" [attr.stroke]="vm.stroke" stroke-width="1" />
+            @for (block of vm.rectBlocks; track trackRect($index, block)) {
+              <g
+                class="canvas-stage-sector"
+                [class.canvas-stage-sector--selected]="block.blockSelected"
+                (pointerdown)="onSectorPointerDown($event, vm.el, block.id)"
+              >
+                <rect
+                  [attr.x]="block.x"
+                  [attr.y]="block.y"
+                  [attr.width]="block.width"
+                  [attr.height]="block.height"
+                  rx="3"
+                  [attr.fill]="block.fill"
+                  fill-opacity="0.72"
+                  [attr.stroke]="block.stroke"
+                  [attr.stroke-width]="block.strokeWidth"
+                />
+                @for (seat of block.seats; track trackSeat($index, seat)) {
+                  @if (seatChairView(seat); as chair) {
+                    <svg:g
+                      appSeatChairGraphic
+                      [x]="chair.x"
+                      [y]="chair.y"
+                      [scale]="chair.scale"
+                      [labelText]="chair.labelText"
+                      [showLabels]="chair.showLabels"
+                      pointer-events="none"
+                    />
+                  }
+                }
+                <text [attr.x]="block.labelX" [attr.y]="block.labelY" text-anchor="middle" font-size="9" font-weight="700" [attr.fill]="vm.labelColor" class="canvas-stage-text" pointer-events="none">{{ block.code }}</text>
+              </g>
+            }
+          }
+
+          @case ('block-grid') {
+            <rect [attr.x]="vm.rect.x" [attr.y]="vm.rect.y" [attr.width]="vm.rect.width" [attr.height]="vm.rect.height" rx="6" [attr.fill]="vm.fill" [attr.stroke]="vm.stroke" [attr.stroke-width]="vm.strokeWidth" />
+            @for (seat of vm.seats; track trackSeat($index, seat)) {
+              @if (seatChairView(seat); as chair) {
+                <svg:g
+                  appSeatChairGraphic
+                  [x]="chair.x"
+                  [y]="chair.y"
+                  [scale]="chair.scale"
+                  [labelText]="chair.labelText"
+                  [showLabels]="chair.showLabels"
+                />
+              }
+            }
+            @for (rl of vm.rowLabels; track trackLabel($index, rl)) {
+              <text [attr.x]="rl.x" [attr.y]="rl.y" text-anchor="middle" [attr.font-size]="rl.fontSize ?? 8" font-weight="600" [attr.fill]="vm.labelColor" class="canvas-stage-text">{{ rl.label }}</text>
+            }
+          }
+
+          @case ('seat-section') {
+            <rect [attr.x]="vm.rect.x" [attr.y]="vm.rect.y" [attr.width]="vm.rect.width" [attr.height]="vm.rect.height" rx="8" [attr.fill]="vm.fill" [attr.stroke]="vm.stroke" [attr.stroke-width]="vm.strokeWidth" />
+            @for (seat of vm.seats; track trackSeat($index, seat)) {
+              @if (seatChairView(seat); as chair) {
+                <svg:g
+                  appSeatChairGraphic
+                  [x]="chair.x"
+                  [y]="chair.y"
+                  [scale]="chair.scale"
+                  [labelText]="chair.labelText"
+                  [showLabels]="chair.showLabels"
+                />
+              }
+            }
+            @if (vm.showRowLabels) {
+              @for (rl of vm.rowLabels; track trackLabel($index, rl)) {
+                <text [attr.x]="rl.x" [attr.y]="rl.y" text-anchor="middle" font-size="9" font-weight="600" [attr.fill]="vm.labelColor" class="canvas-stage-text">{{ rl.label }}</text>
+              }
+            }
+          }
+
+          @case ('aisle') {
+            <rect [attr.x]="vm.rect.x" [attr.y]="vm.rect.y" [attr.width]="vm.rect.width" [attr.height]="vm.rect.height" rx="2" fill="url(#aisle-stripes)" [attr.stroke]="vm.stroke" [attr.stroke-width]="vm.strokeWidth" />
+          }
+
+          @case ('label') {
+            @if (vm.label; as l) {
+              <text [attr.x]="l.x" [attr.y]="l.y" [attr.text-anchor]="l.anchor" [attr.font-size]="l.fontSize" [attr.font-weight]="l.weight" [attr.fill]="l.color" class="canvas-stage-text">{{ l.text }}</text>
+            }
+          }
+        }
+      </g>
+    }
+
+    <!-- Locked seat block zones -->
+    @if (lockedBlockZoneStrs().length > 0) {
+      <g class="canvas-stage-locked-blocks" pointer-events="none">
+        @for (zone of lockedBlockZoneStrs(); track zone) {
+          <polygon
+            [attr.points]="zone"
+            fill="rgba(245,158,11,0.12)"
+            stroke="#d97706"
+            stroke-width="2"
+            stroke-dasharray="8 4"
+          />
+        }
+      </g>
+    }
+
+    <!-- Pending locked zone waiting for dimensions -->
+    @if (pendingLockedZoneStr(); as lockedZone) {
+      <g class="canvas-stage-locked-pending" pointer-events="none">
+        <polygon
+          [attr.points]="lockedZone"
+          fill="rgba(245,158,11,0.22)"
+          stroke="#b45309"
+          stroke-width="2.5"
+          stroke-dasharray="6 3"
+        />
+      </g>
+    }
+
+    <!-- Service route drawing preview -->
+    @if (isServiceRouteDrawing()) {
+      <g class="canvas-stage-draft canvas-stage-draft--service-route" pointer-events="none">
+        @if (serviceRouteDraftList().length >= 2) {
+          <polyline
+            [attr.points]="serviceRouteDraftStr()"
+            fill="none"
+            stroke="#0d9488"
+            stroke-width="3"
+            stroke-linejoin="round"
+            stroke-linecap="round"
+            stroke-dasharray="8 5"
+          />
+        }
+        @for (pt of serviceRouteDraftList(); track trackDraft($index, pt)) {
+          <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="6" fill="#ffffff" stroke="#0d9488" stroke-width="1.5" />
+          <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="2.5" fill="#0d9488" />
+        }
+      </g>
+    }
+
+    <!-- Custom line seat drawing preview -->
+    @if (isLineSeatDrawing()) {
+      <g class="canvas-stage-draft canvas-stage-draft--line-seat" pointer-events="none">
+        @if (lineSeatDraftList().length >= 2) {
+          <polyline
+            [attr.points]="lineSeatDraftStr()"
+            fill="none"
+            stroke="#2563eb"
+            stroke-width="2.5"
+            stroke-linejoin="round"
+            stroke-linecap="round"
+          />
+        }
+        @for (seat of lineSeatPreviewSeats(); track $index) {
+          <circle [attr.cx]="seat.x" [attr.cy]="seat.y" r="5" fill="#ffffff" stroke="#2563eb" stroke-width="1.5" />
+        }
+        @for (pt of lineSeatDraftList(); track trackDraft($index, pt)) {
+          <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="6" fill="#ffffff" stroke="#2563eb" stroke-width="1.5" />
+          <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="2.5" fill="#2563eb" />
+        }
+      </g>
+    }
+
+    <!-- Custom seat row drawing preview -->
+    @if (isSeatRowDrawing()) {
+      <g class="canvas-stage-draft canvas-stage-draft--seats" pointer-events="none">
+        @for (row of seatRowCompletedDrafts(); track $index) {
+          @if (row.length >= 2) {
+            <polyline
+              [attr.points]="draftRowPointsStr(row)"
+              fill="none"
+              stroke="#15803d"
+              stroke-width="2"
+              stroke-linejoin="round"
+              stroke-linecap="round"
+            />
+          }
+        }
+        @if (seatRowDraftList().length > 0) {
+          @if (seatRowDraftList().length >= 2) {
+            <polyline
+              [attr.points]="seatRowDraftStr()"
+              fill="none"
+              stroke="#16a34a"
+              stroke-width="2.5"
+              stroke-linejoin="round"
+              stroke-linecap="round"
+              stroke-dasharray="5 4"
+            />
+          }
+          @for (pt of seatRowDraftList(); track trackDraft($index, pt)) {
+            <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="6" fill="#ffffff" stroke="#16a34a" stroke-width="1.5" />
+            <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="2.5" fill="#16a34a" />
+          }
+        }
+      </g>
+    }
+
+    <!-- Pending locked rows -->
+    @if (pendingRowLinesCanvasPx().length > 0) {
+      <g class="canvas-stage-locked-rows" pointer-events="none">
+        @for (row of pendingRowLinesCanvasPx(); track $index) {
+          @if (row.length >= 2) {
+            <polyline
+              [attr.points]="draftRowPointsStr(row)"
+              fill="none"
+              stroke="#b45309"
+              stroke-width="2.5"
+              stroke-linejoin="round"
+              stroke-linecap="round"
+            />
+          }
+        }
+      </g>
+    }
+
+    <!-- Custom Piece drawing preview -->
+    @if (isDrawing() && draftPointCount() > 0) {
+      <g class="canvas-stage-draft" pointer-events="none">
+        @if (draftPointCount() >= 3) {
+          <polygon
+            [attr.points]="draftBowedPointsStr()"
+            fill="rgba(37,99,235,0.18)"
+            stroke="#2563eb"
+            stroke-width="2"
+            stroke-linejoin="round"
+            stroke-dasharray="6 4"
+          />
+        } @else if (draftPointCount() >= 2) {
+          <polyline
+            [attr.points]="draftBowedPointsStr()"
+            fill="none"
+            stroke="#2563eb"
+            stroke-width="2"
+            stroke-linejoin="round"
+            stroke-linecap="round"
+            stroke-dasharray="6 4"
+          />
+        }
+        @for (pt of draftPointList(); track trackDraft($index, pt)) {
+          @if ($index === 0 && isParkingAreaDrawing() && parkingCloseHoverActive()) {
+            <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="9" fill="#ffffff" stroke="#16a34a" stroke-width="2" />
+            <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="4" fill="#16a34a" />
+          } @else {
+            <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="7" fill="#ffffff" stroke="#2563eb" stroke-width="1.5" />
+            <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="3.25" fill="#2563eb" />
+          }
+        }
+        @if (isParkingAreaDrawing()) {
+          @for (h of draftEdgeBowHandles(); track h.index) {
+            <g
+              class="canvas-stage-draft-bow-handle"
+              pointer-events="all"
+              (pointerdown)="onDraftEdgeBowHandlePointerDown($event, h.index)"
+            >
+              <circle [attr.cx]="h.x" [attr.cy]="h.y" r="11" fill="transparent" />
+              <circle [attr.cx]="h.x" [attr.cy]="h.y" r="5" fill="#facc15" stroke="#78350f" stroke-width="1.5" />
+            </g>
+          }
+        }
+      </g>
+    }
+
+
+    <!-- Parking vehicle-slot path drawing preview -->
+    @if (isParkingSlotDrawing() && parkingSlotDraftPointsPx().length > 0) {
+      <g class="canvas-stage-draft" pointer-events="none">
+        <polyline
+          [attr.points]="parkingSlotDraftPathStr()"
+          fill="none"
+          stroke="#facc15"
+          stroke-width="2"
+          stroke-linejoin="round"
+          stroke-linecap="round"
+          stroke-dasharray="6 4"
+        />
+        @for (pt of parkingSlotDraftPointsPx(); track trackDraft($index, pt)) {
+          <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="6" fill="#ffffff" stroke="#facc15" stroke-width="1.5" />
+          <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="3" fill="#facc15" />
+        }
+        @for (slot of parkingSlotDraftPreview(); track $index) {
+          <svg:g
+            appParkingSlotGraphic
+            [x]="slot.x"
+            [y]="slot.y"
+            [rotationDeg]="slot.rotationDeg"
+            [lengthPx]="slot.lengthPx"
+            [widthPx]="slot.widthPx"
+            [vehicleType]="slot.vehicleType"
+            [preview]="true"
+          />
+        }
+      </g>
+    }
+
+    <!-- Parking driving-route drawing preview -->
+    @if (isParkingRouteDrawing() && parkingRouteDraftPointsPx().length > 0) {
+      <g class="canvas-stage-draft" pointer-events="none">
+        <polyline
+          [attr.points]="parkingRouteDraftPathStr()"
+          fill="none"
+          stroke="#facc15"
+          stroke-width="4"
+          stroke-linejoin="round"
+          stroke-linecap="round"
+          stroke-dasharray="8 5"
+          opacity="0.9"
+        />
+        @for (arrow of parkingRouteDraftArrows(); track $index) {
+          <path
+            d="M -5 -4 L 6 0 L -5 4 Z"
+            fill="#b45309"
+            [attr.transform]="'translate(' + arrow.x + ',' + arrow.y + ') rotate(' + arrow.angleDeg + ')'"
+          />
+        }
+        @for (pt of parkingRouteDraftPointsPx(); track trackDraft($index, pt)) {
+          <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="6" fill="#ffffff" stroke="#facc15" stroke-width="1.5" />
+          <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="3" fill="#facc15" />
+        }
+      </g>
+    }
+
+    <!-- Custom-shape slot drawing preview (dots tracing one slot outline) -->
+    @if (isParkingCustomSlotDrawing() && parkingCustomSlotDraftPointsPx().length > 0) {
+      <g class="canvas-stage-draft" pointer-events="none">
+        <polygon
+          [attr.points]="parkingCustomSlotDraftPathStr()"
+          fill="rgba(191,219,254,0.35)"
+          stroke="#1d4ed8"
+          stroke-width="1.5"
+          stroke-dasharray="5 3"
+          stroke-linejoin="round"
+        />
+        @for (pt of parkingCustomSlotDraftPointsPx(); track trackDraft($index, pt)) {
+          <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="6" fill="#ffffff" stroke="#1d4ed8" stroke-width="1.5" />
+          <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="3" fill="#1d4ed8" />
+        }
+      </g>
+    }
+
+    <!-- Marquee selection box -->
+    @if (marqueeRect(); as box) {
+      <rect
+        class="canvas-stage-marquee"
+        [attr.x]="box.x"
+        [attr.y]="box.y"
+        [attr.width]="box.width"
+        [attr.height]="box.height"
+        pointer-events="none"
+      />
+    }
+
+    <!-- Blueprint audit issue highlight -->
+    @for (box of auditHighlightRects(); track $index) {
+      <g class="canvas-stage-audit-highlight-group" pointer-events="none">
+        <!-- Outer white ring so the focus reads on any chart colour -->
+        <rect
+          class="canvas-stage-audit-highlight-halo"
+          [attr.x]="box.x - 3.5"
+          [attr.y]="box.y - 3.5"
+          [attr.width]="box.width + 7"
+          [attr.height]="box.height + 7"
+          pointer-events="none"
+        />
+        <rect
+          class="canvas-stage-audit-highlight"
+          [class.canvas-stage-audit-highlight--draggable]="box.draggable"
+          [attr.x]="box.x"
+          [attr.y]="box.y"
+          [attr.width]="box.width"
+          [attr.height]="box.height"
+          [attr.pointer-events]="box.draggable ? 'all' : 'none'"
+          (pointerdown)="onAuditHighlightPointerDown($event)"
+        />
+        <!-- Bouncing pointer above the box — readable even when the block is
+             itself a box shape that the ring alone would blend into -->
+        <g
+          class="canvas-stage-audit-arrow"
+          [attr.transform]="'translate(' + (box.x + box.width / 2) + ' ' + (box.y - 8) + ')'"
+          pointer-events="none"
+        >
+          <path class="canvas-stage-audit-arrow-shape" d="M -12 -22 H 12 L 0 0 Z" />
+        </g>
+        @if (box.label) {
+          <rect
+            class="canvas-stage-audit-highlight-badge"
+            [attr.x]="box.x"
+            [attr.y]="box.y + box.height + 6"
+            [attr.width]="box.badgeWidth"
+            height="20"
+            rx="4"
+            pointer-events="none"
+          />
+          <text
+            class="canvas-stage-audit-highlight-label"
+            [attr.x]="box.x + 6"
+            [attr.y]="box.y + box.height + 20"
+            pointer-events="none"
+          >{{ box.label }}</text>
+        }
+      </g>
+    }
+
+    <!-- Interactive block layer (below selection overlay; pass-through rect lets clicks reach blocks) -->
+    <g class="canvas-stage-block-layer">
+      @for (vm of blockLayerVms(); track trackVm($index, vm)) {
+        <g [attr.transform]="vm.transform">
+          @if (vm.sectors; as sectors) {
+            @for (sector of sectors; track trackSector($index, sector)) {
+              <path
+                class="canvas-stage-sector-hit"
+                [attr.d]="sector.path"
+                fill="transparent"
+                stroke="none"
+                pointer-events="all"
+                (pointerdown)="onSectorPointerDown($event, vm.el, sector.id)"
+              />
+            }
+          }
+          @if (vm.rectBlocks; as rectBlocks) {
+            @for (block of rectBlocks; track trackRect($index, block)) {
+              <rect
+                class="canvas-stage-sector-hit"
+                [attr.x]="block.x"
+                [attr.y]="block.y"
+                [attr.width]="block.width"
+                [attr.height]="block.height"
+                fill="transparent"
+                stroke="none"
+                pointer-events="all"
+                (pointerdown)="onSectorPointerDown($event, vm.el, block.id)"
+              />
+            }
+          }
+          @if (
+            vm.shapeMode === 'polygon' &&
+            vm.pathD &&
+            vm.el.type === 'centerpiece' &&
+            (vm.el.customPoints?.length ?? 0) >= 3
+          ) {
+            <polygon
+              class="canvas-stage-block-hit"
+              [attr.data-element-id]="vm.el.id"
+              [attr.points]="vm.pathD"
+              fill="transparent"
+              stroke="none"
+              pointer-events="all"
+              (pointerdown)="onElementPointerDown($event, vm.el)"
+            />
+          }
+        </g>
+      }
+    </g>
+
+    <!-- Selection overlay: move + rotate + resize handles (all shapes) -->
+    @for (sel of selectionOverlays(); track sel.el.id) {
+      <g
+        class="canvas-stage-overlay"
+        [attr.transform]="sel.rotationTransform"
+        [attr.pointer-events]="selectionOverlayPointerEvents(sel.el)"
+      >
+        <rect
+          class="canvas-stage-selection"
+          [class.canvas-stage-selection--viewpoint]="blockViewpointMode()"
+          [attr.x]="sel.rect.x"
+          [attr.y]="sel.rect.y"
+          [attr.width]="sel.rect.width"
+          [attr.height]="sel.rect.height"
+          [attr.stroke-width]="sel.selectionStroke"
+          [attr.pointer-events]="selectionRectPointerEvents(sel.el)"
+          (pointerdown)="onSelectionMoveDown($event, sel.el)"
+        />
+
+        @if (sel.showHandles && !blockViewpointMode()) {
+        @for (pos of handlePositions; track trackHandle($index, pos)) {
+          <rect
+            class="canvas-stage-handle"
+            [attr.x]="sel.handles[pos].x - sel.handleHalf"
+            [attr.y]="sel.handles[pos].y - sel.handleHalf"
+            [attr.width]="sel.handleHalf * 2"
+            [attr.height]="sel.handleHalf * 2"
+            rx="1"
+            [attr.stroke-width]="sel.strokeW"
+            [style.cursor]="sel.handles[pos].cursor"
+            (pointerdown)="onResizeHandleDown($event, sel.el, pos, sel.rect)"
+          />
+        }
+
+        <!-- Move — left branch of V above top centre -->
+        <g
+          class="canvas-stage-move-handle"
+          (pointerdown)="onSelectionMoveDown($event, sel.el)"
+        >
+          <line [attr.x1]="sel.anchorX" [attr.y1]="sel.anchorY" [attr.x2]="sel.moveX" [attr.y2]="sel.moveY" stroke="#2563eb" [attr.stroke-width]="sel.strokeW" />
+          <circle [attr.cx]="sel.moveX" [attr.cy]="sel.moveY" [attr.r]="sel.controlR" fill="#ffffff" stroke="#2563eb" [attr.stroke-width]="sel.strokeW" />
+          <path
+            [attr.d]="'M ' + sel.moveX + ' ' + (sel.moveY - sel.crossArm) + ' v ' + (sel.crossArm * 2) + ' M ' + (sel.moveX - sel.crossArm) + ' ' + sel.moveY + ' h ' + (sel.crossArm * 2)"
+            fill="none"
+            stroke="#2563eb"
+            [attr.stroke-width]="sel.strokeW * 0.8"
+            stroke-linecap="round"
+          />
+        </g>
+        }
+
+        @if (sel.showHandles && !blockViewpointMode()) {
+        <!-- Rotate handle -->
+        <g
+          class="canvas-stage-rotate-handle"
+          (pointerdown)="onRotateHandleDown($event, sel.el, sel.rect)"
+        >
+          <line [attr.x1]="sel.anchorX" [attr.y1]="sel.anchorY" [attr.x2]="sel.rotateX" [attr.y2]="sel.rotateY" stroke="#2563eb" [attr.stroke-width]="sel.strokeW" />
+          <circle [attr.cx]="sel.rotateX" [attr.cy]="sel.rotateY" [attr.r]="sel.controlR" fill="#ffffff" stroke="#2563eb" [attr.stroke-width]="sel.strokeW" />
+          <circle [attr.cx]="sel.rotateX" [attr.cy]="sel.rotateY" [attr.r]="sel.controlR * 0.38" fill="#2563eb" />
+        </g>
+        }
+
+        @if (sel.showHandles && !blockViewpointMode() && sel.customVertices; as vertices) {
+          @for (v of vertices; track trackVertex($index, v)) {
+            <g
+              class="canvas-stage-vertex-handle"
+              (pointerdown)="onVertexPointerDown($event, sel.el, v.index)"
+            >
+              <circle [attr.cx]="v.x" [attr.cy]="v.y" [attr.r]="sel.controlR * 1.7" fill="transparent" />
+              <circle [attr.cx]="v.x" [attr.cy]="v.y" [attr.r]="sel.controlR" fill="#ffffff" stroke="#2563eb" [attr.stroke-width]="sel.strokeW" pointer-events="none" />
+              <line [attr.x1]="v.x - sel.crossArm" [attr.y1]="v.y" [attr.x2]="v.x + sel.crossArm" [attr.y2]="v.y" stroke="#2563eb" [attr.stroke-width]="sel.strokeW * 0.8" stroke-linecap="round" pointer-events="none" />
+            </g>
+          }
+        }
+
+        @if (sel.showHandles && !blockViewpointMode() && sel.parkingEdgeHandles; as edgeHandles) {
+          @for (h of edgeHandles; track h.index) {
+            <g
+              class="canvas-stage-parking-edge-handle"
+              (pointerdown)="onParkingEdgeHandlePointerDown($event, sel.el, h.index)"
+            >
+              <circle [attr.cx]="h.x" [attr.cy]="h.y" [attr.r]="sel.controlR * 1.6" fill="transparent" />
+              <circle [attr.cx]="h.x" [attr.cy]="h.y" [attr.r]="sel.controlR * 0.85" fill="#facc15" stroke="#78350f" [attr.stroke-width]="sel.strokeW" pointer-events="none" />
+            </g>
+          }
+        }
+      </g>
+    }
+
+    @for (vp of viewpointGuides(); track vp.interactive ? 'interactive' : 'confirmed') {
+      <g
+        class="canvas-stage-viewpoint"
+        [class.canvas-stage-viewpoint--confirmed]="!vp.interactive"
+      >
+        @if (vp.interactive) {
+          <circle
+            class="canvas-stage-viewpoint-min"
+            [attr.cx]="vp.cx"
+            [attr.cy]="vp.cy"
+            [attr.r]="vp.minDist"
+            fill="none"
+            stroke="#cbd5e1"
+            stroke-width="1"
+            stroke-dasharray="4 6"
+            pointer-events="none"
+          />
+          <circle
+            class="canvas-stage-viewpoint-orbit"
+            [attr.cx]="vp.cx"
+            [attr.cy]="vp.cy"
+            [attr.r]="vp.orbitR"
+            fill="transparent"
+            stroke="#94a3b8"
+            stroke-width="1.5"
+            stroke-dasharray="6 5"
+            (pointerdown)="onViewpointOrbitPointerDown($event)"
+          />
+        }
+        @if (vp.edges.length) {
+          @for (edge of vp.edges; track $index) {
+            <line
+              class="canvas-stage-viewpoint-edge"
+              [attr.x1]="edge.x1"
+              [attr.y1]="edge.y1"
+              [attr.x2]="edge.x2"
+              [attr.y2]="edge.y2"
+              stroke="#22c55e"
+              [attr.stroke-width]="5 * vp.ui"
+              stroke-linecap="round"
+              pointer-events="none"
+            />
+          }
+        }
+        @if (vp.interactive) {
+          <line
+            class="canvas-stage-viewpoint-ray"
+            [attr.x1]="vp.cx"
+            [attr.y1]="vp.cy"
+            [attr.x2]="vp.x"
+            [attr.y2]="vp.y"
+            stroke="#7c3aed"
+            [attr.stroke-width]="2.5 * vp.ui"
+            stroke-dasharray="6 4"
+            pointer-events="none"
+          />
+          <g
+            class="canvas-stage-viewpoint-marker"
+            (pointerdown)="onViewpointMarkerPointerDown($event)"
+          >
+            <rect
+              [attr.x]="vp.x - vp.labelW / 2"
+              [attr.y]="vp.y - vp.labelH / 2"
+              [attr.width]="vp.labelW"
+              [attr.height]="vp.labelH"
+              rx="5"
+              fill="#ffffff"
+              stroke="#7c3aed"
+              [attr.stroke-width]="2 * vp.ui"
+            />
+            <text
+              [attr.x]="vp.x"
+              [attr.y]="vp.y + vp.fontSize * 0.35"
+              text-anchor="middle"
+              [attr.font-size]="vp.fontSize"
+              font-weight="800"
+              fill="#5b21b6"
+              pointer-events="none"
+            >VIEW POINT</text>
+            <circle [attr.cx]="vp.x" [attr.cy]="vp.y" [attr.r]="18 * vp.ui" fill="transparent" />
+          </g>
+        }
+      </g>
+    }
+
+    <!-- Interactive seat layer (above selection overlay so each seat is individually clickable) -->
+    <g class="canvas-stage-seat-layer" [attr.pointer-events]="inBlockWorkspace() ? 'visiblePainted' : 'none'">
+      @for (vm of seatLayerVms(); track trackVm($index, vm)) {
+        <g [attr.transform]="vm.transform">
+          @if (vm.customSeats; as customSeats) {
+            @for (seat of customSeats; track trackCustomSeat($index, seat)) {
+              <g
+                (pointerdown)="onSeatPointerDown($event, vm.el, seat.seatId)"
+                (dblclick)="onSeatDoubleClick($event, vm.el)"
+                [attr.data-element-id]="vm.el.id"
+                [attr.data-seat-id]="seat.seatId"
+                class="canvas-stage-seat"
+                [class.canvas-stage-seat--selected]="seat.selected"
+                [style.animation-delay.ms]="seat.revealDelayMs ?? $index * 4"
+              >
+                <g [attr.transform]="customSeatTransform(seat)">
+                  <circle
+                    cx="0"
+                    cy="0"
+                    [attr.r]="seat.hitRadius"
+                    fill="transparent"
+                    class="canvas-stage-seat-hit"
+                  />
+                  <svg:g
+                    appSeatChairGraphic
+                    [x]="0"
+                    [y]="0"
+                    [scale]="seat.chairScale ?? 1"
+                    [scaleY]="seat.chairScaleY ?? null"
+                    [rotationDeg]="0"
+                    [labelText]="seat.labelText ?? ''"
+                    [showLabels]="vm.showInlineSeatLabels || !!seat.labelText"
+                    [selected]="seat.selected"
+                    pointer-events="none"
+                  />
+                </g>
+              </g>
+            }
+            @if (vm.showRowLabels) {
+              @for (rl of vm.rowLabels; track trackLabel($index, rl)) {
+                <text
+                  [attr.x]="rl.x"
+                  [attr.y]="rl.y"
+                  text-anchor="middle"
+                  [attr.font-size]="rl.fontSize ?? 8"
+                  font-weight="700"
+                  [attr.fill]="rl.selected ? '#1d4ed8' : vm.labelColor"
+                  class="canvas-stage-text canvas-stage-row-label"
+                  [class.canvas-stage-row-label--selected]="rl.selected"
+                  (pointerdown)="onRowLabelPointerDown($event, vm.el, rl.blockId, rl.rowIndex)"
+                  (dblclick)="onRowLabelDoubleClick($event, vm.el, rl.rowIndex, rl.blockId)"
+                >{{ rl.label }}</text>
+              }
+            }
+          }
+        </g>
+      }
+    </g>
+
+    @if (seatFinderBeacons().length > 0) {
+      <g class="canvas-stage-seat-finder" pointer-events="none">
+        @for (beacon of seatFinderBeacons(); track $index) {
+          <g [attr.transform]="beacon.transform">
+            <circle
+              class="canvas-stage-seat-finder__ring"
+              [attr.cx]="beacon.x"
+              [attr.cy]="beacon.y"
+              [attr.r]="beacon.r"
+            />
+          </g>
+        }
+      </g>
+    }
+
+    @if (blockHoverHitVms(); as hoverHits) {
+      @if (hoverHits.length > 0) {
+        <g class="canvas-stage-block-hover-layer">
+          @for (vm of hoverHits; track trackVm($index, vm)) {
+            <g [attr.transform]="vm.transform" (pointerenter)="onBlockHoverEnter($event, vm.el)">
+              @switch (vm.shapeMode) {
+                @case ('ellipse') {
+                  <ellipse
+                    class="canvas-stage-block-hover-hit"
+                    [attr.data-element-id]="vm.el.id"
+                    [attr.cx]="vm.rect.cx"
+                    [attr.cy]="vm.rect.cy"
+                    [attr.rx]="vm.rect.width / 2"
+                    [attr.ry]="vm.rect.height / 2"
+                    fill="transparent"
+                    pointer-events="all"
+                    (pointerdown)="onElementPointerDown($event, vm.el)"
+                    (dblclick)="onElementDoubleClick($event, vm.el)"
+                  />
+                }
+                @case ('rect') {
+                  <rect
+                    class="canvas-stage-block-hover-hit"
+                    [attr.data-element-id]="vm.el.id"
+                    [attr.x]="vm.rect.x"
+                    [attr.y]="vm.rect.y"
+                    [attr.width]="vm.rect.width"
+                    [attr.height]="vm.rect.height"
+                    [attr.rx]="vm.rectRx ?? 0"
+                    fill="transparent"
+                    pointer-events="all"
+                    (pointerdown)="onElementPointerDown($event, vm.el)"
+                    (dblclick)="onElementDoubleClick($event, vm.el)"
+                  />
+                }
+                @case ('path') {
+                  <path
+                    class="canvas-stage-block-hover-hit"
+                    [attr.data-element-id]="vm.el.id"
+                    [attr.d]="vm.pathD"
+                    fill="transparent"
+                    pointer-events="all"
+                    (pointerdown)="onElementPointerDown($event, vm.el)"
+                    (dblclick)="onElementDoubleClick($event, vm.el)"
+                  />
+                }
+                @case ('polygon') {
+                  <polygon
+                    class="canvas-stage-block-hover-hit"
+                    [attr.data-element-id]="vm.el.id"
+                    [attr.points]="vm.pathD"
+                    fill="transparent"
+                    pointer-events="all"
+                    (pointerdown)="onElementPointerDown($event, vm.el)"
+                    (dblclick)="onElementDoubleClick($event, vm.el)"
+                  />
+                }
+              }
+            </g>
+          }
+        </g>
+      }
+    }
+
+    @if (drawnAisleOverlay(); as overlay) {
+      <g
+        class="canvas-stage-drawn-aisle"
+        [attr.transform]="overlay.transform"
+      >
+        @for (band of overlay.bands; track band.id) {
+          <line
+            [attr.x1]="band.start.x"
+            [attr.y1]="band.start.y"
+            [attr.x2]="band.end.x"
+            [attr.y2]="band.end.y"
+            stroke="#94a3b8"
+            stroke-opacity="0.55"
+            [attr.stroke-width]="band.widthPx"
+            stroke-linecap="round"
+            (pointerdown)="onDrawAisleHandlePointerDown($event, band.id, 'body', band.startLocal, band.endLocal)"
+            style="cursor: move;"
+          />
+          <line
+            [attr.x1]="band.start.x"
+            [attr.y1]="band.start.y"
+            [attr.x2]="band.end.x"
+            [attr.y2]="band.end.y"
+            stroke="#475569"
+            stroke-width="2"
+            stroke-linecap="round"
+            pointer-events="none"
+          />
+          <circle
+            [attr.cx]="band.start.x"
+            [attr.cy]="band.start.y"
+            [attr.r]="overlay.handleR"
+            fill="#f8fafc"
+            stroke="#0f172a"
+            stroke-width="2"
+            style="cursor: grab;"
+            (pointerdown)="onDrawAisleHandlePointerDown($event, band.id, 'start', band.startLocal, band.endLocal)"
+          />
+          <circle
+            [attr.cx]="band.end.x"
+            [attr.cy]="band.end.y"
+            [attr.r]="overlay.handleR"
+            fill="#f8fafc"
+            stroke="#0f172a"
+            stroke-width="2"
+            style="cursor: grab;"
+            (pointerdown)="onDrawAisleHandlePointerDown($event, band.id, 'end', band.startLocal, band.endLocal)"
+          />
+        }
+        @if (overlay.pending; as pending) {
+          <circle
+            [attr.cx]="pending.start.x"
+            [attr.cy]="pending.start.y"
+            [attr.r]="overlay.handleR"
+            fill="#f8fafc"
+            stroke="#0f172a"
+            stroke-width="2"
+            pointer-events="none"
+          />
+          @if (pending.end; as hover) {
+            <line
+              [attr.x1]="pending.start.x"
+              [attr.y1]="pending.start.y"
+              [attr.x2]="hover.x"
+              [attr.y2]="hover.y"
+              stroke="#475569"
+              stroke-width="2"
+              stroke-dasharray="6 4"
+              pointer-events="none"
+            />
+          }
+        }
+      </g>
+    }
+
+    <!-- Dining table layer -->
+    <g class="canvas-stage-table-layer">
+      @for (vm of tableLayerVms(); track trackVm($index, vm)) {
+        <g [attr.transform]="vm.transform">
+          @if (vm.diningTables; as tables) {
+            @for (table of tables; track table.tableId) {
+              <g
+                class="canvas-stage-table"
+                [class.canvas-stage-table--selected]="table.selected"
+                [attr.data-element-id]="vm.el.id"
+                (pointerenter)="onBlockHoverEnter($event, vm.el)"
+                (pointerdown)="onTablePointerDown($event, vm.el, table.tableId)"
+                (dblclick)="onTableDoubleClick($event, vm.el)"
+              >
+                <g [attr.transform]="'translate(' + table.x + ',' + table.y + ') rotate(' + table.rotationDeg + ')'">
+                  @if (table.shape === 'round') {
+                    <circle
+                      [attr.cx]="0"
+                      [attr.cy]="0"
+                      [attr.r]="table.widthPx / 2"
+                      fill="url(#marble-gradient)"
+                      [attr.stroke]="table.selected ? diningTableStrokeSelected : '#cccccc'"
+                      [attr.stroke-width]="table.strokeWidth"
+                      filter="url(#table-shadow)"
+                    />
+                  } @else {
+                    <rect
+                      [attr.x]="-table.widthPx / 2"
+                      [attr.y]="-table.heightPx / 2"
+                      [attr.width]="table.widthPx"
+                      [attr.height]="table.heightPx"
+                      [attr.rx]="table.cornerRadiusPx"
+                      fill="url(#marble-gradient)"
+                      [attr.stroke]="table.selected ? diningTableStrokeSelected : '#cccccc'"
+                      [attr.stroke-width]="table.strokeWidth"
+                      filter="url(#table-shadow)"
+                    />
+                  }
+                  @for (chair of table.chairArcs; track $index) {
+                    <g [attr.transform]="'translate(' + chair.x + ',' + chair.y + ') rotate(' + chair.rotationDeg + ')'">
+                      <!-- Outer Dark Gray Bucket Shell & Armrests -->
+                      <path
+                        [attr.d]="'M ' + (-table.chairArcRadiusPx * 0.95) + ' ' + (table.chairArcRadiusPx * 0.25) +
+                                   ' C ' + (-table.chairArcRadiusPx * 1.0) + ' ' + (-table.chairArcRadiusPx * 0.2) + ', ' + (-table.chairArcRadiusPx * 0.75) + ' ' + (-table.chairArcRadiusPx * 0.7) + ', 0 ' + (-table.chairArcRadiusPx * 0.7) + ' ' +
+                                   ' C ' + (table.chairArcRadiusPx * 0.75) + ' ' + (-table.chairArcRadiusPx * 0.7) + ', ' + (table.chairArcRadiusPx * 1.0) + ' ' + (-table.chairArcRadiusPx * 0.2) + ', ' + (table.chairArcRadiusPx * 0.95) + ' ' + (table.chairArcRadiusPx * 0.25) +
+                                   ' L ' + (table.chairArcRadiusPx * 0.8) + ' ' + (table.chairArcRadiusPx * 0.2) +
+                                   ' C ' + (table.chairArcRadiusPx * 0.85) + ' ' + (-table.chairArcRadiusPx * 0.1) + ', ' + (table.chairArcRadiusPx * 0.65) + ' ' + (-table.chairArcRadiusPx * 0.55) + ', 0 ' + (-table.chairArcRadiusPx * 0.55) + ' ' +
+                                   ' C ' + (-table.chairArcRadiusPx * 0.65) + ' ' + (-table.chairArcRadiusPx * 0.55) + ', ' + (-table.chairArcRadiusPx * 0.8) + ' ' + (-table.chairArcRadiusPx * 0.1) + ', ' + (-table.chairArcRadiusPx * 0.8) + ' ' + (table.chairArcRadiusPx * 0.2) + ' Z'"
+                        fill="#4b5563"
+                        [attr.stroke]="table.selected ? diningTableStrokeSelected : '#374151'"
+                        [attr.stroke-width]="table.strokeWidth * 0.45"
+                      />
+
+                      <!-- Cushion / Seat (pure white/light cream cushion) -->
+                      <path
+                        [attr.d]="'M ' + (-table.chairArcRadiusPx * 0.75) + ' ' + (table.chairArcRadiusPx * 0.1) +
+                                   ' C ' + (-table.chairArcRadiusPx * 0.75) + ' ' + (table.chairArcRadiusPx * 0.75) + ', ' + (-table.chairArcRadiusPx * 0.55) + ' ' + (table.chairArcRadiusPx * 0.9) + ', 0 ' + (table.chairArcRadiusPx * 0.9) + ' ' +
+                                   ' C ' + (table.chairArcRadiusPx * 0.55) + ' ' + (table.chairArcRadiusPx * 0.9) + ', ' + (table.chairArcRadiusPx * 0.75) + ' ' + (table.chairArcRadiusPx * 0.75) + ', ' + (table.chairArcRadiusPx * 0.75) + ' ' + (table.chairArcRadiusPx * 0.1) + ' Z'"
+                        fill="#ffffff"
+                        [attr.stroke]="table.selected ? diningTableStrokeSelected : '#d1d5db'"
+                        [attr.stroke-width]="table.strokeWidth * 0.4"
+                      />
+
+                      <!-- Fine inner stitch details on the backrest (matching image honeycomb effect) -->
+                      <path
+                        [attr.d]="'M ' + (-table.chairArcRadiusPx * 0.4) + ' ' + (-table.chairArcRadiusPx * 0.55) + ' L ' + (-table.chairArcRadiusPx * 0.4) + ' ' + (-table.chairArcRadiusPx * 0.68) +
+                                   ' M 0 ' + (-table.chairArcRadiusPx * 0.55) + ' L 0 ' + (-table.chairArcRadiusPx * 0.7) +
+                                   ' M ' + (table.chairArcRadiusPx * 0.4) + ' ' + (-table.chairArcRadiusPx * 0.55) + ' L ' + (table.chairArcRadiusPx * 0.4) + ' ' + (-table.chairArcRadiusPx * 0.68)"
+                        fill="none"
+                        stroke="#d1d5db"
+                        [attr.stroke-width]="table.strokeWidth * 0.35"
+                      />
+                    </g>
+                  }
+                  @if (table.shape === 'round') {
+                    <circle
+                      cx="0"
+                      cy="0"
+                      [attr.r]="diningTableHitRadius(table)"
+                      fill="transparent"
+                      stroke="none"
+                      pointer-events="all"
+                    />
+                  } @else {
+                    <rect
+                      [attr.x]="-diningTableHitHalfWidth(table)"
+                      [attr.y]="-diningTableHitHalfHeight(table)"
+                      [attr.width]="diningTableHitHalfWidth(table) * 2"
+                      [attr.height]="diningTableHitHalfHeight(table) * 2"
+                      fill="transparent"
+                      stroke="none"
+                      pointer-events="all"
+                    />
+                  }
+                  @if (table.widthPx >= 28) {
+                    <text
+                      x="0"
+                      y="3"
+                      text-anchor="middle"
+                      [attr.font-size]="diningTableLabelFontSize(table)"
+                      font-weight="700"
+                      [attr.fill]="table.selected ? '#ffffff' : '#1e293b'"
+                      pointer-events="none"
+                    >{{ table.label }}</text>
+                  }
+                </g>
+              </g>
+            }
+          }
+        </g>
+      }
+    </g>
+
+    <!-- Dining service route layer -->
+    <g class="canvas-stage-service-route-layer">
+      @for (vm of serviceRouteLayerVms(); track trackVm($index, vm)) {
+        <g [attr.transform]="vm.transform">
+          @if (vm.diningServiceRoutes; as routes) {
+            @for (route of routes; track route.routeId) {
+              <g
+                class="canvas-stage-service-route"
+                [class.canvas-stage-service-route--selected]="route.selected"
+                (pointerdown)="onServiceRoutePointerDown($event, vm.el, route.routeId)"
+              >
+                <!-- Invisible thick line for easy selection / pointer events -->
+                <polyline
+                  [attr.points]="route.pointsStr"
+                  fill="none"
+                  stroke="transparent"
+                  [attr.stroke-width]="route.widthPx"
+                  stroke-linejoin="round"
+                  stroke-linecap="round"
+                  pointer-events="stroke"
+                  style="cursor: pointer;"
+                />
+                <!-- Thin visible dashed line for a clean visual appearance -->
+                <polyline
+                  [attr.points]="route.pointsStr"
+                  fill="none"
+                  [attr.stroke]="vm.selected ? (route.selected ? '#0f766e' : '#14b8a6') : '#94a3b8'"
+                  [attr.stroke-width]="vm.selected ? (route.selected ? 5 : 3) : 2.5"
+                  stroke-linejoin="round"
+                  stroke-linecap="round"
+                  stroke-dasharray="10 6"
+                  pointer-events="none"
+                />
+                @if (vm.selected && route.selected) {
+                  <text
+                    [attr.x]="route.midX"
+                    [attr.y]="route.midY - 5"
+                    text-anchor="middle"
+                    font-size="6.5"
+                    font-weight="700"
+                    fill="#0f766e"
+                    pointer-events="none"
+                  >{{ route.label }}</text>
+                }
+              </g>
+            }
+          }
+        </g>
+      }
+    </g>
+
+    <!-- Parking vehicle slots layer -->
+    <g class="canvas-stage-parking-slot-layer">
+      @for (vm of parkingSlotLayerVms(); track trackVm($index, vm)) {
+        <g [attr.transform]="vm.transform">
+          @if (vm.parkingSlots; as slots) {
+            @for (slot of slots; track slot.id) {
+              <svg:g
+                appParkingSlotGraphic
+                [x]="slot.x"
+                [y]="slot.y"
+                [rotationDeg]="slot.rotationDeg"
+                [lengthPx]="slot.lengthPx"
+                [widthPx]="slot.widthPx"
+                [vehicleType]="slot.vehicleType"
+                [labelText]="slot.label"
+                [labelHeightPx]="slot.labelHeightPx"
+                [shapePoints]="slot.shapePoints"
+                [selected]="slot.selected"
+                [hit]="vm.el.id === canvas.parkingWorkspaceId()"
+                (pointerdown)="onParkingSlotPointerDown($event, vm.el, slot)"
+                (mouseenter)="onParkingSlotMouseEnter($event, slot, vm.el)"
+                (mouseleave)="onParkingSlotMouseLeave()"
+              />
+            }
+          }
+        </g>
+      }
+    </g>
+
+    <!-- Parking driving routes layer (yellow arrowed paths, Enter → Exit) -->
+    <g class="canvas-stage-parking-route-layer">
+      @for (vm of parkingRouteLayerVms(); track trackVm($index, vm)) {
+        <g [attr.transform]="vm.transform">
+          @if (vm.parkingRoutes; as routes) {
+            @for (route of routes; track route.id) {
+              <g pointer-events="none">
+                <polyline
+                  [attr.points]="route.pointsStr"
+                  fill="none"
+                  stroke="#facc15"
+                  stroke-width="4"
+                  stroke-linejoin="round"
+                  stroke-linecap="round"
+                  opacity="0.9"
+                />
+                @for (arrow of route.arrows; track $index) {
+                  <path
+                    d="M -5 -4 L 6 0 L -5 4 Z"
+                    fill="#b45309"
+                    [attr.transform]="'translate(' + arrow.x + ',' + arrow.y + ') rotate(' + arrow.angleDeg + ')'"
+                  />
+                }
+              </g>
+            }
+          }
+        </g>
+      }
+    </g>
+
+    <!-- Parking Enter/Exit markers layer -->
+    <g class="canvas-stage-parking-access-layer">
+      @for (vm of parkingAccessPointLayerVms(); track trackVm($index, vm)) {
+        <g [attr.transform]="vm.transform">
+          @if (vm.parkingAccessPoints; as points) {
+            @for (point of points; track $index) {
+              <g pointer-events="none">
+                <line
+                  [attr.x1]="point.x1"
+                  [attr.y1]="point.y1"
+                  [attr.x2]="point.x2"
+                  [attr.y2]="point.y2"
+                  [attr.stroke]="point.kind === 'enter' ? '#16a34a' : '#dc2626'"
+                  stroke-width="4"
+                  stroke-linecap="round"
+                />
+                <text
+                  [attr.x]="(point.x1 + point.x2) / 2"
+                  [attr.y]="(point.y1 + point.y2) / 2 - 10"
+                  text-anchor="middle"
+                  font-size="7"
+                  font-weight="700"
+                  [attr.fill]="point.kind === 'enter' ? '#16a34a' : '#dc2626'"
+                >{{ point.label }}</text>
+              </g>
+            }
+          }
+        </g>
+      }
+    </g>
+
+    <!-- Dining stage layer -->
+    <g class="canvas-stage-dining-stage-layer">
+      @for (vm of stageLayerVms(); track trackVm($index, vm)) {
+        <g [attr.transform]="vm.transform">
+          @if (vm.diningStage; as stage) {
+            <g
+              class="canvas-stage-dining-stage"
+              [class.canvas-stage-dining-stage--selected]="stage.selected"
+              [attr.data-element-id]="vm.el.id"
+              (pointerenter)="onBlockHoverEnter($event, vm.el)"
+              (pointerdown)="onStagePointerDown($event, vm.el)"
+            >
+              <g [attr.transform]="'translate(' + stage.x + ',' + stage.y + ') rotate(' + stage.rotationDeg + ')'">
+                <rect
+                  [attr.x]="-stage.widthPx / 2"
+                  [attr.y]="-stage.heightPx / 2"
+                  [attr.width]="stage.widthPx"
+                  [attr.height]="stage.heightPx"
+                  rx="1.5"
+                  [attr.fill]="diningStageFill"
+                  [attr.fill-opacity]="0.92"
+                  [attr.stroke]="stage.selected ? diningZoneSelectedStroke : diningStageStroke"
+                  [attr.stroke-width]="diningZoneStrokeWidth(stage.selected)"
+                />
+                <rect
+                  [attr.x]="-stage.widthPx / 2"
+                  [attr.y]="-stage.heightPx / 2"
+                  [attr.width]="stage.widthPx"
+                  [attr.height]="stage.heightPx"
+                  rx="1.5"
+                  fill="url(#dining-stage-hatch)"
+                  pointer-events="none"
+                />
+                <line
+                  [attr.x1]="-stage.widthPx / 2 + 1"
+                  [attr.y1]="stage.heightPx / 2"
+                  [attr.x2]="stage.widthPx / 2 - 1"
+                  [attr.y2]="stage.heightPx / 2"
+                  [attr.stroke]="stage.selected ? diningZoneSelectedStroke : diningStageStroke"
+                  stroke-width="1.15"
+                  opacity="0.85"
+                  pointer-events="none"
+                />
+                @if (diningZoneLabelVisible(stage)) {
+                  <g [attr.transform]="'rotate(' + (-stage.rotationDeg) + ')'" pointer-events="none">
+                    <text
+                      x="0"
+                      y="0"
+                      dy="0.35em"
+                      text-anchor="middle"
+                      [attr.font-size]="diningZoneLabelFontSize(stage)"
+                      font-weight="600"
+                      [attr.fill]="diningZoneLabelFill"
+                      pointer-events="none"
+                    >{{ stage.label }}</text>
+                  </g>
+                }
+                <rect
+                  [attr.x]="-stage.widthPx / 2"
+                  [attr.y]="-stage.heightPx / 2"
+                  [attr.width]="stage.widthPx"
+                  [attr.height]="stage.heightPx"
+                  fill="transparent"
+                  stroke="none"
+                  pointer-events="all"
+                />
+                @if (stage.selected) {
+                  @let hs = diningFeatureResizeHandleSize();
+                  <rect
+                    [attr.x]="-stage.widthPx / 2 - hs / 2"
+                    [attr.y]="-hs / 2"
+                    [attr.width]="hs"
+                    [attr.height]="hs"
+                    rx="1.5"
+                    fill="#ffffff"
+                    stroke="#2563eb"
+                    [attr.stroke-width]="1.2 * accessPointUiScale()"
+                    style="cursor: ew-resize;"
+                    (pointerdown)="onDiningFeatureResizeHandleDown($event, vm.el, 'stage', 'left')"
+                  />
+                  <rect
+                    [attr.x]="stage.widthPx / 2 - hs / 2"
+                    [attr.y]="-hs / 2"
+                    [attr.width]="hs"
+                    [attr.height]="hs"
+                    rx="1.5"
+                    fill="#ffffff"
+                    stroke="#2563eb"
+                    [attr.stroke-width]="1.2 * accessPointUiScale()"
+                    style="cursor: ew-resize;"
+                    (pointerdown)="onDiningFeatureResizeHandleDown($event, vm.el, 'stage', 'right')"
+                  />
+                  <rect
+                    [attr.x]="-hs / 2"
+                    [attr.y]="-stage.heightPx / 2 - hs / 2"
+                    [attr.width]="hs"
+                    [attr.height]="hs"
+                    rx="1.5"
+                    fill="#ffffff"
+                    stroke="#2563eb"
+                    [attr.stroke-width]="1.2 * accessPointUiScale()"
+                    style="cursor: ns-resize;"
+                    (pointerdown)="onDiningFeatureResizeHandleDown($event, vm.el, 'stage', 'top')"
+                  />
+                  <rect
+                    [attr.x]="-hs / 2"
+                    [attr.y]="stage.heightPx / 2 - hs / 2"
+                    [attr.width]="hs"
+                    [attr.height]="hs"
+                    rx="1.5"
+                    fill="#ffffff"
+                    stroke="#2563eb"
+                    [attr.stroke-width]="1.2 * accessPointUiScale()"
+                    style="cursor: ns-resize;"
+                    (pointerdown)="onDiningFeatureResizeHandleDown($event, vm.el, 'stage', 'bottom')"
+                  />
+                  @let rotOff = diningFeatureRotateHandleOffset(stage);
+                  <g
+                    class="canvas-stage-dining-feature-rotate"
+                    style="cursor: grab;"
+                    (pointerdown)="onDiningFeatureRotateHandleDown($event, vm.el, 'stage', stage)"
+                  >
+                    <line
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      [attr.y2]="-rotOff"
+                      stroke="#2563eb"
+                      [attr.stroke-width]="1.15 * accessPointUiScale()"
+                      pointer-events="none"
+                    />
+                    <circle
+                      cx="0"
+                      [attr.cy]="-rotOff"
+                      [attr.r]="7 * accessPointUiScale()"
+                      fill="#ffffff"
+                      stroke="#2563eb"
+                      [attr.stroke-width]="1.35 * accessPointUiScale()"
+                    />
+                    <circle
+                      cx="0"
+                      [attr.cy]="-rotOff"
+                      [attr.r]="2.6 * accessPointUiScale()"
+                      fill="#2563eb"
+                      pointer-events="none"
+                    />
+                  </g>
+                }
+              </g>
+            </g>
+          }
+        </g>
+      }
+    </g>
+
+    <!-- Dining food prep layer -->
+    <g class="canvas-stage-dining-foodprepare-layer">
+      @for (vm of foodPrepareLayerVms(); track trackVm($index, vm)) {
+        <g [attr.transform]="vm.transform">
+          @if (vm.diningFoodPrepare; as fp) {
+            <g
+              class="canvas-stage-dining-foodprepare"
+              [class.canvas-stage-dining-foodprepare--selected]="fp.selected"
+              [attr.data-element-id]="vm.el.id"
+              (pointerenter)="onBlockHoverEnter($event, vm.el)"
+              (pointerdown)="onFoodPreparePointerDown($event, vm.el)"
+            >
+              <g [attr.transform]="'translate(' + fp.x + ',' + fp.y + ') rotate(' + fp.rotationDeg + ')'">
+                <rect
+                  [attr.x]="-fp.widthPx / 2"
+                  [attr.y]="-fp.heightPx / 2"
+                  [attr.width]="fp.widthPx"
+                  [attr.height]="fp.heightPx"
+                  rx="1.5"
+                  [attr.fill]="diningFoodPrepFill"
+                  [attr.fill-opacity]="0.92"
+                  [attr.stroke]="fp.selected ? diningZoneSelectedStroke : diningFoodPrepStroke"
+                  [attr.stroke-width]="diningZoneStrokeWidth(fp.selected)"
+                />
+                <line
+                  [attr.x1]="-fp.widthPx / 2 + 1"
+                  [attr.y1]="fp.heightPx / 2"
+                  [attr.x2]="fp.widthPx / 2 - 1"
+                  [attr.y2]="fp.heightPx / 2"
+                  [attr.stroke]="fp.selected ? diningZoneSelectedStroke : diningFoodPrepStroke"
+                  stroke-width="1.15"
+                  opacity="0.85"
+                  pointer-events="none"
+                />
+                @if (foodPrepIconVisible(fp)) {
+                  <g
+                    [attr.transform]="'rotate(' + (-fp.rotationDeg) + ') scale(' + foodPrepIconScale(fp) + ')'"
+                    pointer-events="none"
+                    fill="none"
+                    [attr.stroke]="fp.selected ? diningZoneSelectedStroke : diningFoodPrepStroke"
+                    [attr.stroke-width]="foodPrepIconStrokeWidth(fp)"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <title>Food Prep</title>
+                    <ellipse cx="0" cy="3.2" rx="6.4" ry="1.35" />
+                    <path d="M-6.2 2.6 C-6.2 -3.4, 6.2 -3.4, 6.2 2.6" />
+                    <line x1="0" y1="-3.4" x2="0" y2="-5.1" />
+                    <circle cx="0" cy="-5.6" r="0.85" />
+                  </g>
+                }
+                <rect
+                  [attr.x]="-fp.widthPx / 2"
+                  [attr.y]="-fp.heightPx / 2"
+                  [attr.width]="fp.widthPx"
+                  [attr.height]="fp.heightPx"
+                  fill="transparent"
+                  stroke="none"
+                  pointer-events="all"
+                />
+                @if (fp.selected) {
+                  @let hs = diningFeatureResizeHandleSize();
+                  <rect
+                    [attr.x]="-fp.widthPx / 2 - hs / 2"
+                    [attr.y]="-hs / 2"
+                    [attr.width]="hs"
+                    [attr.height]="hs"
+                    rx="1.5"
+                    fill="#ffffff"
+                    stroke="#2563eb"
+                    [attr.stroke-width]="1.2 * accessPointUiScale()"
+                    style="cursor: ew-resize;"
+                    (pointerdown)="onDiningFeatureResizeHandleDown($event, vm.el, 'foodprepare', 'left')"
+                  />
+                  <rect
+                    [attr.x]="fp.widthPx / 2 - hs / 2"
+                    [attr.y]="-hs / 2"
+                    [attr.width]="hs"
+                    [attr.height]="hs"
+                    rx="1.5"
+                    fill="#ffffff"
+                    stroke="#2563eb"
+                    [attr.stroke-width]="1.2 * accessPointUiScale()"
+                    style="cursor: ew-resize;"
+                    (pointerdown)="onDiningFeatureResizeHandleDown($event, vm.el, 'foodprepare', 'right')"
+                  />
+                  <rect
+                    [attr.x]="-hs / 2"
+                    [attr.y]="-fp.heightPx / 2 - hs / 2"
+                    [attr.width]="hs"
+                    [attr.height]="hs"
+                    rx="1.5"
+                    fill="#ffffff"
+                    stroke="#2563eb"
+                    [attr.stroke-width]="1.2 * accessPointUiScale()"
+                    style="cursor: ns-resize;"
+                    (pointerdown)="onDiningFeatureResizeHandleDown($event, vm.el, 'foodprepare', 'top')"
+                  />
+                  <rect
+                    [attr.x]="-hs / 2"
+                    [attr.y]="fp.heightPx / 2 - hs / 2"
+                    [attr.width]="hs"
+                    [attr.height]="hs"
+                    rx="1.5"
+                    fill="#ffffff"
+                    stroke="#2563eb"
+                    [attr.stroke-width]="1.2 * accessPointUiScale()"
+                    style="cursor: ns-resize;"
+                    (pointerdown)="onDiningFeatureResizeHandleDown($event, vm.el, 'foodprepare', 'bottom')"
+                  />
+                  @let rotOff = diningFeatureRotateHandleOffset(fp);
+                  <g
+                    class="canvas-stage-dining-feature-rotate"
+                    style="cursor: grab;"
+                    (pointerdown)="onDiningFeatureRotateHandleDown($event, vm.el, 'foodprepare', fp)"
+                  >
+                    <line
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      [attr.y2]="-rotOff"
+                      stroke="#2563eb"
+                      [attr.stroke-width]="1.15 * accessPointUiScale()"
+                      pointer-events="none"
+                    />
+                    <circle
+                      cx="0"
+                      [attr.cy]="-rotOff"
+                      [attr.r]="7 * accessPointUiScale()"
+                      fill="#ffffff"
+                      stroke="#2563eb"
+                      [attr.stroke-width]="1.35 * accessPointUiScale()"
+                    />
+                    <circle
+                      cx="0"
+                      [attr.cy]="-rotOff"
+                      [attr.r]="2.6 * accessPointUiScale()"
+                      fill="#2563eb"
+                      pointer-events="none"
+                    />
+                  </g>
+                }
+              </g>
+            </g>
+          }
+        </g>
+      }
+    </g>
+
+    <!-- Dining access: coloured wall segment on the block border + screen-stable labels -->
+    <g class="canvas-stage-dining-access-layer">
+      @for (vm of entranceLayerVms(); track trackVm($index, vm)) {
+        <g [attr.transform]="vm.transform">
+          @if (vm.diningEntrance; as ap) {
+            @let badge = accessPointBadgeSize(ap);
+            @let openStroke = accessOpeningBorderStrokeWidth(vm);
+            <g
+              class="canvas-stage-dining-access canvas-stage-dining-access--entrance"
+              [attr.pointer-events]="canDragDiningAccessPoints() ? 'all' : 'none'"
+            >
+              @if (ap.wallSegment; as wall) {
+                <line
+                  [attr.x1]="wall.x1"
+                  [attr.y1]="wall.y1"
+                  [attr.x2]="wall.x2"
+                  [attr.y2]="wall.y2"
+                  [attr.stroke]="accessOpeningStroke('entrance')"
+                  [attr.stroke-width]="openStroke"
+                  stroke-linecap="butt"
+                />
+                @if (canDragDiningAccessPoints()) {
+                  <line
+                    class="canvas-stage-dining-access-hit"
+                    [attr.x1]="wall.x1"
+                    [attr.y1]="wall.y1"
+                    [attr.x2]="wall.x2"
+                    [attr.y2]="wall.y2"
+                    stroke="transparent"
+                    [attr.stroke-width]="accessPointDragHitStroke(openStroke)"
+                    stroke-linecap="round"
+                    style="pointer-events: stroke; cursor: grab;"
+                    (pointerdown)="onDiningAccessPointerDown($event, vm.el, 'entrance')"
+                  />
+                }
+              }
+              <g
+                [attr.transform]="'translate(' + ap.x + ',' + ap.y + ') translate(0,' + badge.labelY + ')'"
+                [attr.pointer-events]="canDragDiningAccessPoints() ? 'all' : 'none'"
+                [style.cursor]="canDragDiningAccessPoints() ? 'grab' : null"
+                (pointerdown)="onDiningAccessPointerDown($event, vm.el, 'entrance')"
+              >
+                <rect
+                  [attr.x]="-badge.w / 2"
+                  [attr.y]="-badge.h / 2"
+                  [attr.width]="badge.w"
+                  [attr.height]="badge.h"
+                  [attr.rx]="badge.h / 2"
+                  fill="#ecfdf3"
+                  stroke="#16a34a"
+                  [attr.stroke-width]="1 * accessPointUiScale()"
+                />
+                <text
+                  x="0"
+                  y="0"
+                  text-anchor="middle"
+                  dominant-baseline="middle"
+                  [attr.font-size]="badge.font"
+                  font-weight="700"
+                  fill="#15803d"
+                >Entrance</text>
+              </g>
+            </g>
+          }
+        </g>
+      }
+      @for (vm of exitLayerVms(); track trackVm($index, vm)) {
+        <g [attr.transform]="vm.transform">
+          @if (vm.diningExit; as ap) {
+            @let badge = accessPointBadgeSize(ap);
+            @let openStroke = accessOpeningBorderStrokeWidth(vm);
+            <g
+              class="canvas-stage-dining-access canvas-stage-dining-access--exit"
+              [attr.pointer-events]="canDragDiningAccessPoints() ? 'all' : 'none'"
+            >
+              @if (ap.wallSegment; as wall) {
+                <line
+                  [attr.x1]="wall.x1"
+                  [attr.y1]="wall.y1"
+                  [attr.x2]="wall.x2"
+                  [attr.y2]="wall.y2"
+                  [attr.stroke]="accessOpeningStroke('exit')"
+                  [attr.stroke-width]="openStroke"
+                  stroke-linecap="butt"
+                />
+                @if (canDragDiningAccessPoints()) {
+                  <line
+                    class="canvas-stage-dining-access-hit"
+                    [attr.x1]="wall.x1"
+                    [attr.y1]="wall.y1"
+                    [attr.x2]="wall.x2"
+                    [attr.y2]="wall.y2"
+                    stroke="transparent"
+                    [attr.stroke-width]="accessPointDragHitStroke(openStroke)"
+                    stroke-linecap="round"
+                    style="pointer-events: stroke; cursor: grab;"
+                    (pointerdown)="onDiningAccessPointerDown($event, vm.el, 'exit')"
+                  />
+                }
+              }
+              <g
+                [attr.transform]="'translate(' + ap.x + ',' + ap.y + ') translate(0,' + badge.labelY + ')'"
+                [attr.pointer-events]="canDragDiningAccessPoints() ? 'all' : 'none'"
+                [style.cursor]="canDragDiningAccessPoints() ? 'grab' : null"
+                (pointerdown)="onDiningAccessPointerDown($event, vm.el, 'exit')"
+              >
+                <rect
+                  [attr.x]="-badge.w / 2"
+                  [attr.y]="-badge.h / 2"
+                  [attr.width]="badge.w"
+                  [attr.height]="badge.h"
+                  [attr.rx]="badge.h / 2"
+                  fill="#fef2f2"
+                  stroke="#dc2626"
+                  [attr.stroke-width]="1 * accessPointUiScale()"
+                />
+                <text
+                  x="0"
+                  y="0"
+                  text-anchor="middle"
+                  dominant-baseline="middle"
+                  [attr.font-size]="badge.font"
+                  font-weight="700"
+                  fill="#b91c1c"
+                >Exit</text>
+              </g>
+            </g>
+          }
+        </g>
+      }
+      @for (vm of sharedAccessLayerVms(); track trackVm($index, vm)) {
+        <g [attr.transform]="vm.transform">
+          @if (vm.diningSharedAccess; as ap) {
+            @let badge = accessPointBadgeSize(ap);
+            @let openStroke = accessOpeningBorderStrokeWidth(vm);
+            <g
+              class="canvas-stage-dining-access canvas-stage-dining-access--shared"
+              [attr.pointer-events]="canDragDiningAccessPoints() ? 'all' : 'none'"
+            >
+              @if (ap.wallSegment; as wall) {
+                <line
+                  [attr.x1]="wall.x1"
+                  [attr.y1]="wall.y1"
+                  [attr.x2]="wall.x2"
+                  [attr.y2]="wall.y2"
+                  [attr.stroke]="accessOpeningStroke('shared')"
+                  [attr.stroke-width]="openStroke"
+                  stroke-linecap="butt"
+                />
+                @if (canDragDiningAccessPoints()) {
+                  <line
+                    class="canvas-stage-dining-access-hit"
+                    [attr.x1]="wall.x1"
+                    [attr.y1]="wall.y1"
+                    [attr.x2]="wall.x2"
+                    [attr.y2]="wall.y2"
+                    stroke="transparent"
+                    [attr.stroke-width]="accessPointDragHitStroke(openStroke)"
+                    stroke-linecap="round"
+                    style="pointer-events: stroke; cursor: grab;"
+                    (pointerdown)="onDiningAccessPointerDown($event, vm.el, 'shared')"
+                  />
+                }
+              }
+              <g
+                [attr.transform]="'translate(' + ap.x + ',' + ap.y + ') translate(0,' + badge.labelY + ')'"
+                [attr.pointer-events]="canDragDiningAccessPoints() ? 'all' : 'none'"
+                [style.cursor]="canDragDiningAccessPoints() ? 'grab' : null"
+                (pointerdown)="onDiningAccessPointerDown($event, vm.el, 'shared')"
+              >
+                <rect
+                  [attr.x]="-52 * accessPointUiScale()"
+                  [attr.y]="-badge.h / 2"
+                  [attr.width]="104 * accessPointUiScale()"
+                  [attr.height]="badge.h"
+                  [attr.rx]="badge.h / 2"
+                  fill="#f0fdfa"
+                  stroke="#0f766e"
+                  [attr.stroke-width]="1 * accessPointUiScale()"
+                />
+                <text
+                  x="0"
+                  y="0"
+                  text-anchor="middle"
+                  dominant-baseline="middle"
+                  [attr.font-size]="badge.font"
+                  font-weight="700"
+                  fill="#0f766e"
+                >Entry / Exit</text>
+              </g>
+            </g>
+          }
+        </g>
+      }
+    </g>
+
+    @if (accessPointPlacementPreviewVm(); as preview) {
+      @let ap = preview.node;
+      @let badge = accessPointBadgeSize(ap);
+      @let kind = preview.kind;
+      <g class="canvas-stage-access-placement-preview" pointer-events="none">
+        @if (ap.wallSegment; as wall) {
+          <line
+            [attr.x1]="wall.x1"
+            [attr.y1]="wall.y1"
+            [attr.x2]="wall.x2"
+            [attr.y2]="wall.y2"
+            [attr.stroke]="accessOpeningStroke(kind)"
+            stroke-width="5"
+            stroke-linecap="butt"
+            stroke-dasharray="6 4"
+          />
+        } @else {
+          <g [attr.transform]="'translate(' + ap.x + ',' + ap.y + ') rotate(' + ap.rotationDeg + ')'">
+            <line
+              [attr.x1]="-ap.widthPx / 2"
+              y1="0"
+              [attr.x2]="ap.widthPx / 2"
+              y2="0"
+              [attr.stroke]="accessOpeningStroke(kind)"
+              stroke-width="5"
+              stroke-linecap="butt"
+              stroke-dasharray="6 4"
+            />
+          </g>
+        }
+        <g [attr.transform]="'translate(' + ap.x + ',' + ap.y + ') translate(0,' + badge.labelY + ')'">
+          <text
+            x="0"
+            y="0"
+            text-anchor="middle"
+            dominant-baseline="middle"
+            [attr.font-size]="badge.font"
+            font-weight="700"
+            [attr.fill]="kind === 'entrance' ? '#15803d' : kind === 'shared' ? '#0f766e' : '#b91c1c'"
+          >{{ kind === 'entrance' ? 'Entrance' : kind === 'shared' ? 'Entry / Exit' : 'Exit' }}</text>
+        </g>
+      </g>
+    }
+
+    @if (stageSidePickEdges(); as edges) {
+      <g class="canvas-stage-stage-side-edges">
+        @for (edge of edges; track edge.id) {
+          <g class="canvas-stage-stage-side-edge-group">
+            <line
+              class="canvas-stage-stage-side-edge-hit"
+              [attr.x1]="edge.x1"
+              [attr.y1]="edge.y1"
+              [attr.x2]="edge.x2"
+              [attr.y2]="edge.y2"
+              stroke="transparent"
+              [attr.stroke-width]="edge.hitWidth"
+              stroke-linecap="round"
+              (pointerdown)="onStageSideEdgePointerDown($event, edge.id)"
+            />
+            <line
+              class="canvas-stage-stage-side-edge"
+              [attr.x1]="edge.x1"
+              [attr.y1]="edge.y1"
+              [attr.x2]="edge.x2"
+              [attr.y2]="edge.y2"
+              [attr.stroke]="edge.stroke"
+              [attr.stroke-width]="edge.strokeWidth"
+              stroke-linecap="round"
+              pointer-events="none"
+            />
+            <text
+              [attr.x]="edge.midX"
+              [attr.y]="edge.midY - 8"
+              text-anchor="middle"
+              [attr.font-size]="edge.labelSize"
+              font-weight="700"
+              [attr.fill]="edge.stroke"
+              pointer-events="none"
+            >{{ edge.label }}</text>
+          </g>
+        }
+      </g>
+    }
+
+    @if (foodPrepareSidePickEdges(); as edges) {
+      <g class="canvas-stage-foodprepare-side-edges">
+        @for (edge of edges; track edge.id) {
+          <g class="canvas-stage-stage-side-edge-group">
+            <line
+              class="canvas-stage-stage-side-edge-hit"
+              [attr.x1]="edge.x1"
+              [attr.y1]="edge.y1"
+              [attr.x2]="edge.x2"
+              [attr.y2]="edge.y2"
+              stroke="transparent"
+              [attr.stroke-width]="edge.hitWidth"
+              stroke-linecap="round"
+              (pointerdown)="onFoodPrepareSideEdgePointerDown($event, edge.id)"
+            />
+            <line
+              class="canvas-stage-stage-side-edge"
+              [attr.x1]="edge.x1"
+              [attr.y1]="edge.y1"
+              [attr.x2]="edge.x2"
+              [attr.y2]="edge.y2"
+              [attr.stroke]="edge.stroke"
+              [attr.stroke-width]="edge.strokeWidth"
+              stroke-linecap="round"
+              pointer-events="none"
+            />
+            <text
+              [attr.x]="edge.midX"
+              [attr.y]="edge.midY - 8"
+              text-anchor="middle"
+              [attr.font-size]="edge.labelSize"
+              font-weight="700"
+              [attr.fill]="edge.stroke"
+              pointer-events="none"
+            >{{ edge.label }}</text>
+          </g>
+        }
+      </g>
+    }
+
+    @if (gaWorkspaceEdges(); as edges) {
+      <g class="canvas-stage-ga-edges">
+        @for (edge of edges; track edge.id) {
+          <g class="canvas-stage-ga-edge-group">
+            <line
+              class="canvas-stage-ga-edge-hit"
+              [attr.x1]="edge.x1"
+              [attr.y1]="edge.y1"
+              [attr.x2]="edge.x2"
+              [attr.y2]="edge.y2"
+              stroke="transparent"
+              [attr.stroke-width]="edge.hitWidth"
+              stroke-linecap="round"
+              (pointerdown)="onGaSideEdgePointerDown($event, edge.id)"
+            />
+            <line
+              class="canvas-stage-ga-edge"
+              [class.canvas-stage-ga-edge--pending]="edge.isPending"
+              [attr.x1]="edge.x1"
+              [attr.y1]="edge.y1"
+              [attr.x2]="edge.x2"
+              [attr.y2]="edge.y2"
+              [attr.stroke]="edge.stroke"
+              [attr.stroke-width]="edge.strokeWidth"
+              [attr.stroke-dasharray]="edge.dashArray"
+              stroke-linecap="round"
+              pointer-events="none"
+            />
+            <text
+              class="canvas-stage-ga-edge-label"
+              [attr.x]="edge.midX"
+              [attr.y]="edge.midY - edge.strokeWidth - 2"
+              text-anchor="middle"
+              font-size="11"
+              font-weight="700"
+              [attr.fill]="edge.stroke"
+              pointer-events="none"
+            >{{ edge.label }}</text>
+            @if (edge.isViewpoint && !edge.isPending) {
+              <text
+                class="canvas-stage-ga-edge-label"
+                [attr.x]="edge.midX"
+                [attr.y]="edge.midY + edge.strokeWidth + 12"
+                text-anchor="middle"
+                font-size="10"
+                font-weight="700"
+                fill="#15803d"
+                pointer-events="none"
+              >VIEW POINT</text>
+            }
+            @if (edge.isPending && edge.displayLengthM != null) {
+              <text
+                class="canvas-stage-ga-edge-label canvas-stage-ga-edge-length"
+                [attr.x]="edge.midX"
+                [attr.y]="edge.midY + edge.strokeWidth + 12"
+                text-anchor="middle"
+                font-size="11"
+                font-weight="700"
+                [attr.fill]="edge.stroke"
+                pointer-events="none"
+              >{{ edge.displayLengthM.toFixed(1) }}m</text>
+            }
+          </g>
+        }
+      </g>
+    }
+
+    @if (dragSeatsHighlightEdge(); as edge) {
+      <g class="canvas-stage-drag-seats-highlight">
+        <line
+          class="canvas-stage-drag-seats-highlight-edge"
+          [attr.x1]="edge.x1"
+          [attr.y1]="edge.y1"
+          [attr.x2]="edge.x2"
+          [attr.y2]="edge.y2"
+          stroke="#eab308"
+          [attr.stroke-width]="edge.strokeWidth"
+          stroke-linecap="round"
+          pointer-events="none"
+        />
+      </g>
+    }
+
+    @if (arrangeByRowMeasureEdges(); as edges) {
+      <g class="canvas-stage-measure-edges">
+        @for (edge of edges; track edge.id) {
+          <g class="canvas-stage-measure-edge-group">
+            <line
+              class="canvas-stage-measure-edge-hit"
+              [attr.x1]="edge.x1"
+              [attr.y1]="edge.y1"
+              [attr.x2]="edge.x2"
+              [attr.y2]="edge.y2"
+              stroke="transparent"
+              [attr.stroke-width]="edge.hitWidth"
+              stroke-linecap="round"
+              (pointerdown)="onArrangeByRowEdgePointerDown($event, edge.id)"
+            />
+            <line
+              class="canvas-stage-measure-edge"
+              [class.canvas-stage-measure-edge--pending]="edge.isPending"
+              [class.canvas-stage-measure-edge--active]="edge.isActive"
+              [class.canvas-stage-measure-edge--done]="edge.isMeasured"
+              [attr.x1]="edge.x1"
+              [attr.y1]="edge.y1"
+              [attr.x2]="edge.x2"
+              [attr.y2]="edge.y2"
+              [attr.stroke]="edge.stroke"
+              [attr.stroke-width]="edge.strokeWidth"
+              [attr.stroke-dasharray]="edge.dashArray"
+              stroke-linecap="round"
+              pointer-events="none"
+            />
+            @if (edge.isMeasured) {
+              <text
+                class="canvas-stage-measure-edge-label"
+                [attr.x]="edge.midX"
+                [attr.y]="edge.midY - edge.strokeWidth - 2"
+                text-anchor="middle"
+                [attr.font-size]="edge.labelSize"
+                font-weight="700"
+                fill="#15803d"
+                pointer-events="none"
+              >{{ edge.lengthM.toFixed(1) }}m</text>
+            }
+            @if (edge.isViewpoint) {
+              <text
+                class="canvas-stage-measure-edge-label"
+                [attr.x]="edge.midX"
+                [attr.y]="edge.midY + edge.strokeWidth + (edge.isMeasured ? 12 : 2)"
+                text-anchor="middle"
+                [attr.font-size]="edge.labelSize"
+                font-weight="700"
+                fill="#15803d"
+                pointer-events="none"
+              >VIEW POINT</text>
+            }
+          </g>
+        }
+      </g>
+    }
+    @if (venueScaleEdgeVm(); as edge) {
+      <g class="canvas-stage-calibration" pointer-events="none">
+        <line
+          [attr.x1]="edge.x1"
+          [attr.y1]="edge.y1"
+          [attr.x2]="edge.x2"
+          [attr.y2]="edge.y2"
+          class="canvas-stage-calibration-edge"
+        />
+        <circle [attr.cx]="edge.x1" [attr.cy]="edge.y1" r="3.5" class="canvas-stage-calibration-dot" />
+        <circle [attr.cx]="edge.x2" [attr.cy]="edge.y2" r="3.5" class="canvas-stage-calibration-dot" />
+        <text
+          [attr.x]="edge.midX"
+          [attr.y]="edge.midY - 8"
+          text-anchor="middle"
+          class="canvas-stage-calibration-label"
+        >{{ edge.label }} — enter real length (m)</text>
+      </g>
+    }
+
+    @if (parkingMeasureEdges(); as edges) {
+      <g class="canvas-stage-parking-measure-edges">
+        @for (edge of edges; track edge.index) {
+          <g class="canvas-stage-parking-measure-edge-group">
+            <polyline
+              class="canvas-stage-parking-measure-edge-hit"
+              [attr.points]="edge.pointsStr"
+              fill="none"
+              stroke="transparent"
+              [attr.stroke-width]="edge.hitWidth"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              (pointerdown)="onParkingMeasureEdgePointerDown($event, edge.index)"
+            />
+            <polyline
+              class="canvas-stage-parking-measure-edge"
+              [class.canvas-stage-parking-measure-edge--pending]="edge.isPending"
+              [class.canvas-stage-parking-measure-edge--done]="edge.isDone"
+              [attr.points]="edge.pointsStr"
+              fill="none"
+              [attr.stroke]="edge.stroke"
+              [attr.stroke-width]="edge.strokeWidth"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              pointer-events="none"
+            />
+            @if (edge.isDone) {
+              <text
+                class="canvas-stage-parking-measure-edge-label"
+                [attr.x]="edge.midX"
+                [attr.y]="edge.midY - edge.strokeWidth - 2"
+                text-anchor="middle"
+                [attr.font-size]="edge.labelSize"
+                font-weight="700"
+                fill="#15803d"
+                pointer-events="none"
+              >{{ edge.lengthM!.toFixed(1) }}m</text>
+            }
+          </g>
+        }
+      </g>
+    }
+</svg>
+
+<app-canvas-hover-tooltip />
+
+@if (isColorDetecting()) {
+  <div class="canvas-stage-hint">
+    Click a coloured block on the blueprint to trace it as a 2D shape · middle-click drag to pan · Esc to exit trace mode
+  </div>
+} @else if (isDrawing()) {
+  <div class="canvas-stage-hint">
+  Click to add points · middle-click drag to pan · double-click or Enter to finish (min 3) · Esc to cancel
+  </div>
+}
+
+@if (isDrawing() && !isParkingAreaDrawing() && draftPointCount() >= 3) {
+  <button type="button" class="canvas-stage-complete-fab" (click)="completeCustomDraw()">
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M4 12.5 9.5 18 20 6.5" />
+    </svg>
+    Complete block ({{ draftPointCount() }} points)
+  </button>
+} @else if (isLineSeatDrawing()) {
+  <div class="canvas-stage-hint">
+  Draw seat rows manually · click to draw a row line · double-click or Enter to place seats (min 2 points) · Esc to cancel
+  </div>
+} @else if (isPerSeatPlacing()) {
+  <div class="canvas-stage-hint canvas-stage-hint--seats">
+  Click inside the shape to place each seat · drag seats to reposition · Esc when done
+  </div>
+} @else if (isServiceRouteDrawing()) {
+  <div class="canvas-stage-hint canvas-stage-hint--seats">
+    Click inside the block to draw a service route · double-click or Enter to finish (min 2 points) · Esc to cancel
+  </div>
+} @else if (stageSidePickMode()) {
+  <div class="canvas-stage-hint canvas-stage-hint--viewpoint">
+    Click the <strong>side</strong> where the stage should go · the stage rotates to match that edge · Esc to cancel
+  </div>
+} @else if (arrangeByRowMeasureMode()) {
+  <div class="canvas-stage-hint canvas-stage-hint--seats">
+    Click each <strong>faded line</strong> on the block (one after another) · enter all lengths on the left · confirm all at once — lines turn <strong>green</strong>
+  </div>
+} @else if (gaWorkspaceEdges()) {
+  <div class="canvas-stage-hint canvas-stage-hint--seats">
+    Click a <strong>dashed line</strong> on the block to select it (turns <strong style="color:#eab308">yellow</strong>) · enter a label on the left · confirm to save
+  </div>
+} @else if (isDragFillSeatsActive()) {
+  <div class="canvas-stage-hint canvas-stage-hint--seats">
+    Double-click block for first seat (VIEW POINT side) · click last seat to select · <strong>double-click + drag along row</strong> to fill that line · <strong>double-click + drag inward</strong> for multiple rows (max seats each) · Esc to exit
+  </div>
+} @else if (isDragFillSeatsActive()) {
+  <div class="canvas-stage-hint canvas-stage-hint--seats">
+    Double-click block for first seat (VIEW POINT side) · click last seat to select · <strong>double-click + drag along row</strong> to fill that line · <strong>double-click + drag inward</strong> for multiple rows (max seats each) · Esc to exit
+  </div>
+} @else if (isArrangeByRowActive()) {
+  <div class="canvas-stage-hint canvas-stage-hint--seats">
+  Click to place the first seat · drag to set the last seat and fill columns · release to finish row · drag last seat to extend · Esc to exit
+  </div>
+} @else if (blockViewpointMode()) {
+  <div class="canvas-stage-hint canvas-stage-hint--viewpoint">
+    Drag <strong>VIEW POINT</strong> around the block · green edge = audience front · confirm on the left · middle-click pan · +/- zoom
+    @if (seatFinderBeacons().length > 0) {
+      · <strong>{{ seatFinderBeacons().length }} seat{{ seatFinderBeacons().length === 1 ? '' : 's' }}</strong> marked with a pulsing ring
+    }
+  </div>
+} @else if (isSeatRowDrawing()) {
+  <div class="canvas-stage-hint canvas-stage-hint--seats">
+  Draw seat area manually · click each row line · double-click or Enter to finish a row (min 2 points) · complete all rows then finish block · Esc to cancel
+  </div>
+}
