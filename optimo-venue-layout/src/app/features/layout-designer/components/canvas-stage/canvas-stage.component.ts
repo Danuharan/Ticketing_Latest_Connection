@@ -4144,23 +4144,6 @@ export class CanvasStageComponent {
   @HostListener('document:pointerup')
   protected onPointerUp(): void {
     const longPressFired = this.longPressTriggered;
-    let tapToFitId: string | null = null;
-    if (
-      !longPressFired &&
-      this.longPressSession &&
-      !this.canvas.autoFillLayoutMode() &&
-      !this.inBlockWorkspace()
-    ) {
-      const tapped = this.canvas
-        .elements()
-        .find((item) => item.id === this.longPressSession!.elementId);
-      if (
-        tapped?.type === 'centerpiece' &&
-        (tapped.blockType === 'seating' || tapped.blockType === 'dining-table')
-      ) {
-        tapToFitId = tapped.id;
-      }
-    }
     if (this.longPressSession) {
       this.clearLongPress(longPressFired);
     }
@@ -4280,9 +4263,6 @@ export class CanvasStageComponent {
     this.drag = null;
     this.auditRegionDrag = null;
     this.isMoveDragging.set(false);
-    if (tapToFitId) {
-      this.zoomCanvasToReadableBlock(tapToFitId);
-    }
   }
 
   protected onSeatDoubleClick(event: MouseEvent, el: LayoutElement): void {
@@ -4563,14 +4543,6 @@ export class CanvasStageComponent {
     return ctm ? ctm.a : this.canvas.zoom() / 100;
   }
 
-  private zoomCanvasToReadableBlock(elementId: string): void {
-    const svg = this.svgRef()?.nativeElement;
-    this.canvas.fitCameraToElement(elementId, {
-      viewportWidth: svg?.clientWidth || undefined,
-      viewportHeight: svg?.clientHeight || undefined,
-    });
-  }
-
   private toCanvasPct(clientX: number, clientY: number): { xPct: number; yPct: number } | null {
     const pt = this.toCanvasPx(clientX, clientY);
     if (!pt) {
@@ -4703,6 +4675,12 @@ export class CanvasStageComponent {
     return this.canvas.seatHydrationPhase() === 'outline';
   }
 
+  /** Lazily-loaded layouts paint chairs only for the block the user is on. */
+  private canPaintSeats(elementId: string): boolean {
+    const allowed = this.canvas.seatRenderElementIds();
+    return allowed === null || allowed.has(elementId);
+  }
+
   private cachedSeatMap<T extends SeatNode>(
     cacheKey: string,
     builder: () => { seats: T[]; rowLabels: RowLabelNode[] },
@@ -4822,7 +4800,7 @@ export class CanvasStageComponent {
     let customSeats: CustomSeatVM[] | undefined;
     let rowLabels: RowLabelNode[] | undefined;
     let showSeatNumbers = false;
-    if (hasTracedBlockOutline(el) && isCustomShapeSeatingEnabled(el)) {
+    if (hasTracedBlockOutline(el) && isCustomShapeSeatingEnabled(el) && this.canPaintSeats(el.id)) {
       const map = this.cachedSeatMap(`${el.id}:custom`, () => buildCustomShapeSeatMap(el, rect));
       const polygon = polygonCanvasPointsFromBlock(el.customPoints ?? [], rect);
 
@@ -4908,7 +4886,10 @@ export class CanvasStageComponent {
       customizable &&
       this.canvas.blockWorkspaceId() === el.id &&
       !perSeatLabels &&
-      el.seatLayout?.showRowLabels !== false;
+      el.seatLayout?.showRowLabels !== false &&
+      // Dense metre packs (100+ rows) make letter labels unreadable — hide them.
+      (rowLabels?.length ?? 0) > 0 &&
+      (rowLabels?.length ?? 0) <= 40;
     const seatExtras = customSeats
       ? {
           customSeats,

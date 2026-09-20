@@ -44,6 +44,26 @@ export class VenueBlockConfigurationService {
     return (data ?? []) as VenueBlockConfigRow[];
   }
 
+  /** One block's seating, fetched when the user opens that block. */
+  async getForElement(
+    venueLayoutTemplateId: string,
+    elementId: string,
+  ): Promise<VenueBlockConfigRow | null> {
+    const { data, error } = await this.db
+      .from('venue_block_configurations')
+      .select(
+        'id, venue_layout_template_id, block_id, element_id, master_config_template_id, source_master_version, block_type, config_schema_version, config, created_by, updated_by',
+      )
+      .eq('venue_layout_template_id', venueLayoutTemplateId)
+      .eq('element_id', elementId)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+    return (data as VenueBlockConfigRow | null) ?? null;
+  }
+
   /**
    * Persists seating into block_config_templates + venue_block_configurations.
    * Returns layout with venueBlockId / appliedConfigId stamped for the geometry shell.
@@ -52,6 +72,7 @@ export class VenueBlockConfigurationService {
     venueLayoutTemplateId: string,
     layout: VenueLayoutConfig,
     venueName: string,
+    options?: { deletedElementIds?: readonly string[] },
   ): Promise<VenueLayoutConfig> {
     const userId = this.requireUserId();
     const withIds = ensureVenueBlockIds(layout);
@@ -59,8 +80,10 @@ export class VenueBlockConfigurationService {
     const existing = await this.listForVenue(venueLayoutTemplateId);
     const existingByElement = new Map(existing.map((row) => [row.element_id, row]));
 
-    const keepElementIds = new Set(entries.map((e) => e.elementId));
-    const toDelete = existing.filter((row) => !keepElementIds.has(row.element_id));
+    // Only blocks the caller reports as deleted are removed. A block whose seating
+    // was never fetched has no entry below, and must keep its stored config.
+    const deleted = new Set(options?.deletedElementIds ?? []);
+    const toDelete = existing.filter((row) => deleted.has(row.element_id));
     if (toDelete.length > 0) {
       const { error: deleteError } = await this.db
         .from('venue_block_configurations')
@@ -75,8 +98,25 @@ export class VenueBlockConfigurationService {
     }
 
     for (const entry of entries) {
-      const masterId = await this.upsertMasterTemplate(entry, venueName, userId);
+      // Persist display name on seating so it survives layout_config strip.
+      entry.seating = {
+        ...entry.seating,
+        appliedConfigName: entry.seating.appliedConfigName ?? entry.label,
+      };
       const prev = existingByElement.get(entry.elementId);
+
+      // Untouched blocks skip both writes, so editing one block in a 100-block
+      // venue costs one update instead of two hundred.
+      if (
+        prev &&
+        prev.block_type === entry.blockType &&
+        seatingConfigsEqual(prev.config?.seating, entry.seating)
+      ) {
+        this.stampShellIdentity(withIds, entry, prev.block_id, prev.master_config_template_id);
+        continue;
+      }
+
+      const masterId = await this.upsertMasterTemplate(entry, venueName, userId);
       const blockId = prev?.block_id ?? entry.venueBlockId;
       const config = { seating: entry.seating };
 
@@ -112,17 +152,28 @@ export class VenueBlockConfigurationService {
         }
       }
 
-      // Stamp shell identity onto the in-memory layout for layout_config persist.
-      const el = withIds.elements.find((item) => item.id === entry.elementId);
-      if (el && el.type === 'centerpiece') {
-        el.venueBlockId = blockId;
-        el.appliedConfigId = masterId;
-        el.appliedConfigName = entry.label;
-        el.blockType = 'seating';
-      }
+      this.stampShellIdentity(withIds, entry, blockId, masterId);
     }
 
     return withIds;
+  }
+
+  /** Copies row identity onto the in-memory layout so layout_config keeps the link. */
+  private stampShellIdentity(
+    layout: VenueLayoutConfig,
+    entry: BlockSeatingPersistEntry,
+    blockId: string,
+    masterConfigId: string | null,
+  ): void {
+    const el = layout.elements.find((item) => item.id === entry.elementId);
+    if (el && el.type === 'centerpiece') {
+      el.venueBlockId = blockId;
+      if (masterConfigId) {
+        el.appliedConfigId = masterConfigId;
+      }
+      el.appliedConfigName = entry.label;
+      el.blockType = 'seating';
+    }
   }
 
   private async upsertMasterTemplate(
@@ -192,4 +243,31 @@ export class VenueBlockConfigurationService {
     }
     return id;
   }
+}
+
+/** Key order and absent-vs-undefined differences must not read as an edit. */
+function canonicalizeConfig(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalizeConfig);
+  }
+  if (value !== null && typeof value === 'object') {
+    const source = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(source).sort()) {
+      if (source[key] !== undefined) {
+        out[key] = canonicalizeConfig(source[key]);
+      }
+    }
+    return out;
+  }
+  return value;
+}
+
+function seatingConfigsEqual(
+  a: BlockSeatingConfigSnapshot | undefined,
+  b: BlockSeatingConfigSnapshot | undefined,
+): boolean {
+  return (
+    JSON.stringify(canonicalizeConfig(a ?? null)) === JSON.stringify(canonicalizeConfig(b ?? null))
+  );
 }

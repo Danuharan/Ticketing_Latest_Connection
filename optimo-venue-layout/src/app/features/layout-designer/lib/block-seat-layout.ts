@@ -1,8 +1,15 @@
 import { SeatLabelStyle, SeatLayoutSpec } from '../models/layout-element.model';
 import { rowLabel } from './seat-layout';
 
-const MAX_ROWS = 100;
-const MAX_SEATS_PER_ROW = 200;
+/**
+ * Hard caps for a single block's seat grid. These used to be 100×200, which
+ * silently truncated metre Auto Fill on large stands (e.g. 65m depth ≈ 116
+ * rows) and left an empty strip at the back of the block.
+ */
+export const MAX_SEAT_LAYOUT_ROWS = 500;
+export const MAX_SEATS_PER_ROW = 500;
+
+const MAX_ROWS = MAX_SEAT_LAYOUT_ROWS;
 
 function clampInt(value: number, min: number, max: number): number {
   const rounded = Math.round(Number.isFinite(value) ? value : min);

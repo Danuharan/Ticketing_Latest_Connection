@@ -94,6 +94,9 @@ export function extractSeatingSnapshot(el: CenterpieceElement): BlockSeatingConf
       : undefined,
     customSeatBlocks: el.customSeatBlocks ? structuredClone(el.customSeatBlocks) : undefined,
     customSideLengthsM: el.customSideLengthsM ? [...el.customSideLengthsM] : undefined,
+    customSideNames: el.customSideNames ? [...el.customSideNames] : undefined,
+    gaConfiguredSides: el.gaConfiguredSides ? structuredClone(el.gaConfiguredSides) : undefined,
+    appliedConfigName: el.appliedConfigName,
     dragSeatsMode: el.dragSeatsMode,
     dragSeatsStadiumSideIndex: el.dragSeatsStadiumSideIndex,
     dragSeatsStadiumSideIndices: el.dragSeatsStadiumSideIndices
@@ -111,6 +114,8 @@ export function extractSeatingSnapshot(el: CenterpieceElement): BlockSeatingConf
     defineByRowColumnRows: el.defineByRowColumnRows,
     defineByRowColumnColumns: el.defineByRowColumnColumns,
     blockViewpointAngleDeg: el.blockViewpointAngleDeg,
+    blockViewpointManuallySet: el.blockViewpointManuallySet,
+    seatStartSide: el.seatStartSide,
     labelOffsetXPct: el.labelOffsetXPct,
     labelOffsetYPct: el.labelOffsetYPct,
   };

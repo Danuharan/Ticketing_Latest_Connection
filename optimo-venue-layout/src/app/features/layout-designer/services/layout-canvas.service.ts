@@ -750,6 +750,120 @@ export class LayoutCanvasService {
   readonly parkingMeasureEdgeIndex = signal<number | null>(null);
 
   /**
+   * Blocks whose seating config has been fetched this session (including blocks
+   * that turned out to have none). Editing a block requires it to be in here.
+   */
+  private readonly hydratedBlockIds = new Set<string>();
+
+  /**
+   * Elements the user explicitly deleted. Saving removes the matching
+   * venue_block_configurations rows — nothing else is ever deleted, because
+   * un-fetched blocks legitimately have no seating in memory.
+   */
+  private readonly deletedBlockElementIds = new Set<string>();
+
+  /**
+   * True when the template was opened without its seating configs, so blocks are
+   * fetched on demand and only the block being worked on paints chairs.
+   */
+  readonly lazySeatingMode = signal(false);
+
+  isBlockHydrated(elementId: string): boolean {
+    return this.hydratedBlockIds.has(elementId);
+  }
+
+  markBlockHydrated(elementId: string): void {
+    this.hydratedBlockIds.add(elementId);
+  }
+
+  /** Lets a failed fetch be retried the next time the block is opened. */
+  forgetBlockHydration(elementId: string): void {
+    this.hydratedBlockIds.delete(elementId);
+  }
+
+  /**
+   * Merges a block's fetched seating onto the canvas. Deliberately not pushed to
+   * history — hydration is part of loading, so undo must not wipe the seats out.
+   */
+  hydrateBlockSeating(
+    elementId: string,
+    buildPatch: (el: CenterpieceElement) => Partial<CenterpieceElement> | null,
+  ): void {
+    this.markBlockHydrated(elementId);
+    const current = this.elements().find((el) => el.id === elementId);
+    if (!current || !isCenterpiece(current)) {
+      return;
+    }
+    const patch = buildPatch(current);
+    if (!patch) {
+      return;
+    }
+    this.elements.update((items) =>
+      items.map((el) => (el.id === elementId ? ({ ...el, ...patch } as LayoutElement) : el)),
+    );
+  }
+
+  /**
+   * Blocks allowed to paint chairs, or null for every block. Lazily-loaded
+   * layouts only paint the block in focus, so clicking through a stadium does
+   * not accumulate tens of thousands of seat nodes.
+   */
+  readonly seatRenderElementIds = computed<ReadonlySet<string> | null>(() => {
+    if (!this.lazySeatingMode()) {
+      return null;
+    }
+    const ids = new Set<string>(this.selectedIds());
+    const workspace = this.blockWorkspaceId();
+    if (workspace) {
+      ids.add(workspace);
+    }
+    const single = this.selectedId();
+    if (single) {
+      ids.add(single);
+    }
+    return ids;
+  });
+
+  /** Element ids to delete from venue_block_configurations on the next save. */
+  pendingBlockDeletions(): string[] {
+    const live = new Set(this.elements().map((el) => el.id));
+    // An undone delete puts the element back, so re-check against the layout.
+    return [...this.deletedBlockElementIds].filter((id) => !live.has(id));
+  }
+
+  clearPendingBlockDeletions(ids: string[]): void {
+    for (const id of ids) {
+      this.deletedBlockElementIds.delete(id);
+    }
+  }
+
+  /** True while any block on the canvas still has unfetched seating. */
+  hasUnhydratedBlocks(): boolean {
+    return this.elements().some(
+      (el) =>
+        isCenterpiece(el) &&
+        !this.hydratedBlockIds.has(el.id) &&
+        (Boolean(el.seatingSummary) || el.blockType === 'seating'),
+    );
+  }
+
+  /**
+   * Blocks that arrive with their seating fields merged in are already fetched.
+   * Everything else is fetched on demand — including blocks that have no seating
+   * at all, which costs one empty lookup the first time they are opened.
+   */
+  private resetBlockHydrationTracking(): void {
+    this.hydratedBlockIds.clear();
+    this.deletedBlockElementIds.clear();
+    this.lazySeatingMode.set(false);
+    for (const el of this.elements()) {
+      if (isCenterpiece(el) && isCustomShapeSeatingEnabled(el)) {
+        this.hydratedBlockIds.add(el.id);
+      }
+    }
+  }
+
+  /**
    * Large-template seat hydration: outline first (blocks only), then progressive seat graphics.
    * Avoids freezing the main thread when opening stadium layouts with 10k+ seats.
    */
@@ -1279,7 +1393,7 @@ export class LayoutCanvasService {
       if (el.type === 'block-grid' || el.type === 'seat-section') {
         return total + 1;
       }
-      if (el.type === 'centerpiece' && isCustomShapeSeatingEnabled(el)) {
+      if (el.type === 'centerpiece' && (isCustomShapeSeatingEnabled(el) || el.seatingSummary)) {
         const rect = rectFromPositionSize(el.position, el.size, this.canvas());
         return total + (getCustomShapeVisibleSeatCount(el, rect) > 0 ? 1 : 0);
       }
@@ -1289,6 +1403,15 @@ export class LayoutCanvasService {
 
   readonly seatCount = computed(() =>
     this.elements().reduce((total, el) => total + countSeats(el), 0),
+  );
+
+  /**
+   * Seats whose geometry is in memory right now. Blocks whose seating config has
+   * not been fetched count toward `seatCount` (from their summary) but have
+   * nothing to paint, so progressive hydration must budget against this instead.
+   */
+  readonly renderableSeatCount = computed(() =>
+    this.elements().reduce((total, el) => total + countRenderableSeats(el), 0),
   );
 
   /** Adds a tool to the canvas and selects it. Custom Piece enters draw mode only. */
@@ -1786,6 +1909,9 @@ export class LayoutCanvasService {
     }
     this.pushHistory();
     const idSet = new Set(ids);
+    for (const id of ids) {
+      this.deletedBlockElementIds.add(id);
+    }
     this.elements.update((items) => items.filter((el) => !idSet.has(el.id)));
     const nextSelected = this.selectedIds().filter((id) => !idSet.has(id));
     this.selectedIds.set(nextSelected);
@@ -7667,6 +7793,7 @@ export class LayoutCanvasService {
       defineByRowColumnRows: undefined,
       defineByRowColumnColumns: undefined,
       code: undefined,
+      seatingSummary: undefined,
     });
     this.selectedSeatId.set(null);
     this.selectedCustomRow.set(null);
@@ -7725,6 +7852,7 @@ export class LayoutCanvasService {
     this.parkingWorkspaceId.set(null);
     this.parkingWorkspaceStep.set('draw-area');
     this.parkingMeasureEdgeIndex.set(null);
+    this.resetBlockHydrationTracking();
     this.cameraX.set(config.canvas.width / 2);
     this.cameraY.set(config.canvas.height / 2);
   }
@@ -7753,6 +7881,7 @@ export class LayoutCanvasService {
     this.syncHistoryFlags();
     this.blockWorkspaceId.set(null);
     this.blockWorkspaceReturnView = null;
+    this.resetBlockHydrationTracking();
     const id = state.selectedId;
     this.selectedId.set(id && this.elements().some((el) => el.id === id) ? id : null);
     this.selectedIds.set(this.selectedId() ? [this.selectedId()!] : []);
@@ -8128,7 +8257,7 @@ export class LayoutCanvasService {
 
   /** After leaving a block, fill chairs in batches so the overview does not freeze. */
   private revealOverviewSeatsGradually(): void {
-    const total = this.seatCount();
+    const total = this.renderableSeatCount();
     if (total <= 1200) {
       this.completeSeatHydration();
       return;
@@ -8464,7 +8593,18 @@ export class LayoutCanvasService {
       appliedConfigName: configName,
     };
     if (seating) {
-      Object.assign(patch, seatingSnapshotToPatch(seating));
+      const seatingPatch = seatingSnapshotToPatch(seating);
+      // Keep target block's own side measurements when applying a reusable template.
+      if (el.customSideLengthsM?.length) {
+        delete seatingPatch.customSideLengthsM;
+      }
+      if (el.customSideNames?.length) {
+        delete seatingPatch.customSideNames;
+      }
+      if (el.gaConfiguredSides?.length) {
+        delete seatingPatch.gaConfiguredSides;
+      }
+      Object.assign(patch, seatingPatch);
     }
     if (dining) {
       Object.assign(patch, diningSnapshotToPatch(dining));
@@ -8771,6 +8911,11 @@ function snapshotsEqual(a: LayoutElement[], b: LayoutElement[]): boolean {
 }
 
 function countSeats(el: LayoutElement): number {
+  if (el.type === 'centerpiece') {
+    // Shell-only blocks are counted from their stored summary, so this must not
+    // go through hasSeats() — that gate needs the seating fields in memory.
+    return getCustomShapeVisibleSeatCount(el);
+  }
   if (!hasSeats(el)) {
     return 0;
   }
@@ -8786,9 +8931,14 @@ function countSeats(el: LayoutElement): number {
       );
     case 'layer-rect':
       return el.blocks.reduce((sum, b) => sum + Math.max(0, b.rows) * Math.max(0, b.seatsPerRow), 0);
-    case 'centerpiece':
-      return getCustomShapeVisibleSeatCount(el);
     default:
       return 0;
   }
+}
+
+function countRenderableSeats(el: LayoutElement): number {
+  if (el.type === 'centerpiece') {
+    return isCustomShapeSeatingEnabled(el) ? getCustomShapeVisibleSeatCount(el) : 0;
+  }
+  return countSeats(el);
 }

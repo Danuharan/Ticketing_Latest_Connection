@@ -14,6 +14,7 @@ import {
   createSeatLayoutSpec,
   getSeatLayoutRowSeatCounts,
   getSeatLayoutSpec,
+  MAX_SEAT_LAYOUT_ROWS,
   seatId,
 } from './block-seat-layout';
 import {
@@ -72,7 +73,7 @@ interface EdgeFrame {
 export type ViewpointSeatFrame = EdgeFrame;
 
 function resolveShapeSeatFirstRowDepthPx(rowGapPx: number, edgeSpanPx: number): number {
-  const seatRadius = Math.max(2.8, rowGapPx * 0.42);
+  const seatRadius = packSeatRadiusPx(rowGapPx);
   return placementSeatBorderPaddingPx(rowGapPx, edgeSpanPx, seatRadius);
 }
 
@@ -82,7 +83,7 @@ function estimateMaxArrangeByRowDepthPx(
   rowGapPx: number,
   referenceSpanPx: number,
 ): number {
-  const seatRadius = Math.max(2.8, rowGapPx * 0.42);
+  const seatRadius = packSeatRadiusPx(rowGapPx);
   const depthPadding = placementSeatBorderPaddingPx(rowGapPx, referenceSpanPx, seatRadius);
   let maxVertexDepth = depthPadding;
   for (const vertex of polygon) {
@@ -285,6 +286,31 @@ export function computeDirectionalPxPerMetre(
     ppmAlong: alongCount > 0 ? alongSum / alongCount : isotropic,
     ppmDepth: depthCount > 0 ? depthSum / depthCount : isotropic,
   };
+}
+
+/**
+ * Packing floor — only to avoid divide-by-zero. Real metres decide how many
+ * seats fit. A 6px / 8px render floor used to clamp pitch on small canvas
+ * blocks, so 30m and 100m produced the same seat count.
+ */
+export const MIN_PACK_PITCH_PX = 0.05;
+
+export function packMetresToPx(metres: number, ppm: number, minPx = MIN_PACK_PITCH_PX): number {
+  const px = metres * ppm;
+  if (!Number.isFinite(px) || px <= 0) {
+    return minPx;
+  }
+  return Math.max(minPx, px);
+}
+
+/**
+ * Seat body radius used when testing “does this chair fit inside the outline?”
+ * Must track pitch — a fixed 2.8px floor (from the old 6px canvas pack) left an
+ * empty strip and made dense metre packs look like a solid blob.
+ */
+export function packSeatRadiusPx(pitchPx: number): number {
+  const pitch = Number.isFinite(pitchPx) && pitchPx > 0 ? pitchPx : MIN_PACK_PITCH_PX;
+  return Math.max(MIN_PACK_PITCH_PX * 0.4, pitch * 0.42);
 }
 
 export function deriveBlockDimsFromSides(
@@ -1083,13 +1109,13 @@ function collectPaddedSegmentsAtDepth(
   pitchPx: number,
 ): { start: number; end: number }[] {
   const chord = getChordAtDepth(polygon, frame, depthPx, pitchPx);
-  const step = Math.max(0.5, pitchPx / 12);
+  const step = Math.max(Math.min(0.5, pitchPx / 4), pitchPx / 12, MIN_PACK_PITCH_PX);
   const scanMax = Math.max(frame.edgeLength * 4, 400);
   const scanMin = chord ? Math.min(chord.minAlong, -scanMax) : -scanMax;
   const scanEnd = chord ? Math.max(chord.maxAlong, scanMax) : scanMax;
   // Size padding from pitch, not the full block chord — a wide chord used to
   // inflate the inset and erase short viable spans beside concave notches.
-  const seatRadius = Math.max(2.8, pitchPx * 0.42);
+  const seatRadius = packSeatRadiusPx(pitchPx);
   const paddingPx = placementSeatBorderPaddingPx(pitchPx, pitchPx * 4, seatRadius);
 
   const segments: { start: number; end: number }[] = [];
@@ -1163,7 +1189,7 @@ function chordInnerBounds(
   pitchPx: number,
 ): { innerMin: number; innerMax: number } | null {
   const span = chord.maxAlong - chord.minAlong;
-  const seatRadius = Math.max(2.8, pitchPx * 0.42);
+  const seatRadius = packSeatRadiusPx(pitchPx);
   const sideInset = placementSeatBorderPaddingPx(pitchPx, span, seatRadius);
   const innerMin = chord.minAlong + sideInset;
   const innerMax = chord.maxAlong - sideInset;
@@ -1306,7 +1332,7 @@ function insetSegmentBounds(
   pitchPx: number,
 ): { innerMin: number; innerMax: number } | null {
   const span = end - start;
-  const seatRadius = Math.max(2.8, pitchPx * 0.42);
+  const seatRadius = packSeatRadiusPx(pitchPx);
   const sideInset = placementSeatBorderPaddingPx(pitchPx, span, seatRadius);
   const innerMin = start + sideInset;
   const innerMax = end - sideInset;
@@ -1376,7 +1402,7 @@ function placeRowShapeFillAtBounds(
   fixedPitch = false,
   aisleEvenGaps = false,
 ): CanvasPoint[] {
-  const seatRadius = Math.max(2.8, pitchPx * 0.42);
+  const seatRadius = packSeatRadiusPx(pitchPx);
   const edgePadding = placementSeatBorderPaddingPx(
     pitchPx,
     Math.max(1, innerMax - innerMin),
@@ -1536,7 +1562,7 @@ function placeRowShapeFillAllSegments(
   }
 
   const chord = getChordAtDepth(polygon, frame, depthPx, pitchPx);
-  const step = Math.max(0.5, pitchPx / 12);
+  const step = Math.max(Math.min(0.5, pitchPx / 4), pitchPx / 12, MIN_PACK_PITCH_PX);
   const scanMax = Math.max(frame.edgeLength * 4, 400);
   const scanMin = chord ? Math.min(chord.minAlong, -scanMax) : -scanMax;
   const scanEnd = chord ? Math.max(chord.maxAlong, scanMax) : scanMax;
@@ -1553,7 +1579,7 @@ function placeRowShapeFillAllSegments(
   }
   rawSegments.sort((a, b) => a.start - b.start);
 
-  const seatRadius = Math.max(2.8, pitchPx * 0.42);
+  const seatRadius = packSeatRadiusPx(pitchPx);
   const positions: CanvasPoint[] = [];
   let remaining =
     maxSeatsCap != null && maxSeatsCap > 0 ? maxSeatsCap : Number.POSITIVE_INFINITY;
@@ -2676,11 +2702,11 @@ function arrangeByRowSeatFrame(
   const angle = viewpointAngleDeg ?? element.blockViewpointAngleDeg ?? null;
   // Same edge as the green VIEW POINT marker — rows stay parallel to that block side.
   const frame = buildStadiumEdgeFrame(polygon, rect, safeSideIndex, angle);
-  const ppm = computePxPerMetre(polygon, sideLengthsM);
+  const { ppmAlong, ppmDepth } = computeDirectionalPxPerMetre(polygon, sideLengthsM, frame);
   const seatGapM = resolveSeatGapMFromDims(dims);
   const rowGapM = resolveRowGapMFromDims(dims);
-  const pitchPx = Math.max(6, (dims.chairWidthM + seatGapM) * ppm);
-  const rowGapPx = Math.max(8, (dims.chairLengthM + rowGapM) * ppm);
+  const pitchPx = packMetresToPx(dims.chairWidthM + seatGapM, ppmAlong);
+  const rowGapPx = packMetresToPx(dims.chairLengthM + rowGapM, ppmDepth);
   const firstDepth = resolveShapeSeatFirstRowDepthPx(rowGapPx, frame.edgeLength);
   return { polygon, frame, pitchPx, rowGapPx, firstDepth };
 }
@@ -3473,7 +3499,10 @@ export function createArrangeByRowGridSeating(
   aislePlacement?: ArrangeByRowAislePlacement,
   placementOptions?: ArrangeByRowPlacementOptions,
 ): { patch: Partial<CenterpieceElement> } | { error: string } {
-  const rows = Math.max(1, Math.round(rowCount));
+  const rows = Math.min(
+    MAX_SEAT_LAYOUT_ROWS,
+    Math.max(1, Math.round(rowCount)),
+  );
   const seatsCap =
     seatsPerRowCap != null && seatsPerRowCap > 0 ? Math.round(seatsPerRowCap) : undefined;
   const polygon = getOutlineCanvasPoints(element, rect);
@@ -3560,17 +3589,40 @@ export function createArrangeByRowGridSeating(
     try {
     const seatGapM = resolveSeatGapMFromDims(dims);
     const rowGapM = resolveRowGapMFromDims(dims);
-    const pitchPx = Math.max(
-      blueprintScale?.minSeatPitchPx ?? 6,
-      (dims.chairWidthM + seatGapM) * ppm,
+    const { ppmAlong, ppmDepth } = computeDirectionalPxPerMetre(polygon, sideLengthsM, frame);
+    const pitchPx = packMetresToPx(
+      dims.chairWidthM + seatGapM,
+      blueprintScale ? ppm : ppmAlong,
+      blueprintScale?.minSeatPitchPx ?? MIN_PACK_PITCH_PX,
     );
-    const rowGapPx = Math.max(
-      blueprintScale?.minRowSpacingPx ?? 8,
-      (dims.chairLengthM + rowGapM) * ppm,
+    let rowGapPx = packMetresToPx(
+      dims.chairLengthM + rowGapM,
+      blueprintScale ? ppm : ppmDepth,
+      blueprintScale?.minRowSpacingPx ?? MIN_PACK_PITCH_PX,
     );
     const exactPitch = blueprintScale?.exactPitchPlacement === true;
-    const firstDepth = resolveShapeSeatFirstRowDepthPx(rowGapPx, frame.edgeLength);
-    const maxDepth = estimateMaxArrangeByRowDepthPx(polygon, frame, rowGapPx, frame.edgeLength);
+    let firstDepth = resolveShapeSeatFirstRowDepthPx(rowGapPx, frame.edgeLength);
+    let maxDepth = estimateMaxArrangeByRowDepthPx(polygon, frame, rowGapPx, frame.edgeLength);
+    // If metre pitch would create more rows than the layout hard-cap, stretch
+    // the gap so the capped row count still fills front→back (no empty strip).
+    {
+      const probe = collectViableRowDepths(
+        polygon,
+        frame,
+        firstDepth,
+        rowGapPx,
+        maxDepth,
+        pitchPx,
+        MAX_SEAT_LAYOUT_ROWS + 1,
+        resolveMinSeatsPerRow(seatsCap),
+      );
+      if (probe.length > MAX_SEAT_LAYOUT_ROWS) {
+        const span = Math.max(rowGapPx, maxDepth - firstDepth);
+        rowGapPx = span / Math.max(1, MAX_SEAT_LAYOUT_ROWS - 1);
+        firstDepth = resolveShapeSeatFirstRowDepthPx(rowGapPx, frame.edgeLength);
+        maxDepth = estimateMaxArrangeByRowDepthPx(polygon, frame, rowGapPx, frame.edgeLength);
+      }
+    }
     const style: SeatLabelStyle = 'letter';
 
     const rowSeatCounts: number[] = [];
@@ -3601,9 +3653,7 @@ export function createArrangeByRowGridSeating(
         ? Math.max(0, aislePlacement.aisleWidthM)
         : 0;
     const wantsCenterAisle = aislePlacement?.centerAisle === true;
-    // Per-direction px/m so row and column aisles scale correctly on
-    // non-square blocks where ppmX ≠ ppmY.
-    const { ppmAlong, ppmDepth } = computeDirectionalPxPerMetre(polygon, sideLengthsM, frame);
+    // ppmAlong / ppmDepth already resolved above for seat pitch.
     const resolveDepthWidthPx = (specific?: number): number => {
       const metres =
         specific != null && Number.isFinite(specific) && specific > 0
@@ -3673,7 +3723,7 @@ export function createArrangeByRowGridSeating(
       ...centerRowAislesToStraightBands(polygon, frame, centerRowWidthsPx),
     ];
     const hasDrawnAisle = drawnBands.length > 0;
-    const drawnSeatRadius = Math.max(2.8, pitchPx * 0.42);
+    const drawnSeatRadius = packSeatRadiusPx(pitchPx);
 
     if (useCenterColumn) {
       const acrossPx =
@@ -4038,7 +4088,7 @@ export function placeSeatsOnViewpointSpan(
   const sign: 1 | -1 = endAlong >= startAlong ? 1 : -1;
   const dragSpan = Math.abs(endAlong - startAlong);
   const maxByDrag = 1 + Math.floor((dragSpan + 1e-6) / pitchPx);
-  const padding = Math.max(2.8, pitchPx * 0.42);
+  const padding = packSeatRadiusPx(pitchPx);
   const placements: CanvasPoint[] = [];
   for (let index = 0; index < maxByDrag && index < 512; index += 1) {
     const along = startAlong + sign * index * pitchPx;

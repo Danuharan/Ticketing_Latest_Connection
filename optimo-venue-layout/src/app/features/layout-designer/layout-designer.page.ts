@@ -48,6 +48,7 @@ import { LayoutCanvasService } from './services/layout-canvas.service';
 import { LayoutDesignerDraft, LayoutDraftService } from './services/layout-draft.service';
 import { venueTemplateKeys } from '../venue-layouts/services/venue-template.keys';
 import { VenueTemplateService } from '../venue-layouts/services/venue-template.service';
+import { seatingRowToElementPatch } from '../venue-layouts/lib/layout-seating-split';
 import { parkingTemplateKeys } from '../venue-layouts/services/parking-template.keys';
 import { ParkingTemplateService } from '../venue-layouts/services/parking-template.service';
 import { LayoutPreviewComponent } from '../venue-layouts/components/layout-preview/layout-preview.component';
@@ -140,6 +141,55 @@ export class LayoutDesignerPage implements OnInit, OnDestroy {
       const inWorkspace = Boolean(this.canvas.blockWorkspaceId());
       untracked(() => this.syncBlockWorkspaceHistory(inWorkspace));
     });
+
+    // Fetch a block's seating the moment the user reaches for it. Selecting a
+    // block always precedes dragging or opening it, so this covers both.
+    effect(() => {
+      const focused = new Set(this.canvas.selectedIds());
+      const workspace = this.canvas.blockWorkspaceId();
+      if (workspace) {
+        focused.add(workspace);
+      }
+      const single = this.canvas.selectedId();
+      if (single) {
+        focused.add(single);
+      }
+      untracked(() => {
+        for (const id of focused) {
+          void this.hydrateBlock(id);
+        }
+      });
+    });
+  }
+
+  /**
+   * Pulls one block's stored seating onto the canvas. Safe to call repeatedly —
+   * the canvas remembers which blocks it already fetched.
+   */
+  private async hydrateBlock(elementId: string): Promise<void> {
+    const venueId = this.templateId();
+    if (!venueId || this.canvas.isBlockHydrated(elementId)) {
+      return;
+    }
+    const el = this.canvas.elements().find((item) => item.id === elementId);
+    if (!el || el.type !== 'centerpiece') {
+      return;
+    }
+    // Claim it up front so a second click cannot start the same request twice.
+    this.canvas.markBlockHydrated(elementId);
+    try {
+      const row = await this.templates.getBlockSeatingRow(venueId, elementId);
+      if (row) {
+        this.canvas.hydrateBlockSeating(elementId, (current) =>
+          seatingRowToElementPatch(row, current),
+        );
+      }
+    } catch (error) {
+      this.canvas.forgetBlockHydration(elementId);
+      this.toast.error(
+        error instanceof Error ? error.message : 'Could not load this block’s seating.',
+      );
+    }
   }
 
   /**
@@ -981,11 +1031,15 @@ export class LayoutDesignerPage implements OnInit, OnDestroy {
       const id = this.templateId();
 
       if (id) {
+        const deletedBlockElementIds = this.canvas.pendingBlockDeletions();
         await this.templates.updateTemplate(id, {
           name,
           description: this.description(),
           layoutConfig,
+          deletedBlockElementIds,
+          hasUnfetchedSeating: this.canvas.hasUnhydratedBlocks(),
         });
+        this.canvas.clearPendingBlockDeletions(deletedBlockElementIds);
         this.drafts.clear(this.drafts.storageKey(id));
         this.queryClient.invalidateQueries({ queryKey: venueTemplateKeys.list() });
         this.queryClient.invalidateQueries({ queryKey: venueTemplateKeys.detail(id) });
@@ -1043,11 +1097,15 @@ export class LayoutDesignerPage implements OnInit, OnDestroy {
       const id = this.templateId();
 
       if (id) {
+        const deletedBlockElementIds = this.canvas.pendingBlockDeletions();
         await this.templates.updateTemplate(id, {
           name,
           description: this.description(),
           layoutConfig,
+          deletedBlockElementIds,
+          hasUnfetchedSeating: this.canvas.hasUnhydratedBlocks(),
         });
+        this.canvas.clearPendingBlockDeletions(deletedBlockElementIds);
         this.drafts.clear(this.drafts.storageKey(id));
         this.queryClient.invalidateQueries({ queryKey: venueTemplateKeys.list() });
         this.queryClient.invalidateQueries({ queryKey: venueTemplateKeys.detail(id) });
@@ -1130,10 +1188,13 @@ export class LayoutDesignerPage implements OnInit, OnDestroy {
       selectedId: draft.selectedId,
       blockWorkspaceId: draft.blockWorkspaceId ?? null,
     });
+    // A draft of a saved venue carries the same geometry shell, so blocks it
+    // never fetched still have to be pulled on demand.
+    this.canvas.lazySeatingMode.set(Boolean(draft.templateId));
     if (draft.blockWorkspaceId) {
       this.canvas.completeSeatHydration();
     } else {
-      this.canvas.beginSeatHydration(this.canvas.seatCount());
+      this.canvas.beginSeatHydration(this.canvas.renderableSeatCount());
     }
     this.referenceFileName.set(draft.layoutConfig.referenceImage?.name ?? null);
     this.saveNotice.set(null);
@@ -1187,7 +1248,8 @@ export class LayoutDesignerPage implements OnInit, OnDestroy {
     try {
       const template = await this.queryClient.fetchQuery({
         queryKey: venueTemplateKeys.detail(id),
-        queryFn: () => this.templates.getTemplateById(id),
+        // Blocks only. Seating for a block arrives when the user opens that block.
+        queryFn: () => this.templates.getTemplateById(id, { withSeating: false }),
       });
       const draftKey = this.drafts.storageKey(id);
 
@@ -1209,7 +1271,8 @@ export class LayoutDesignerPage implements OnInit, OnDestroy {
       await this.yieldToBrowser();
 
       this.canvas.loadLayoutConfig(template.layout_config);
-      this.canvas.beginSeatHydration(this.canvas.seatCount());
+      this.canvas.lazySeatingMode.set(true);
+      this.canvas.beginSeatHydration(this.canvas.renderableSeatCount());
       this.referenceFileName.set(template.layout_config.referenceImage?.name ?? null);
       this.activePanel.set('chooser');
       this.notice.set(null);

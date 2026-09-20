@@ -165,7 +165,8 @@ export class VenueLayoutsPage {
   protected prefetchTemplate(id: string): void {
     void this.queryClient.prefetchQuery({
       queryKey: venueTemplateKeys.detail(id),
-      queryFn: () => this.templates.getTemplateById(id),
+      // Shell only — the designer fetches each block's seating when it is opened.
+      queryFn: () => this.templates.getTemplateById(id, { withSeating: false }),
       staleTime: 60_000,
     });
   }

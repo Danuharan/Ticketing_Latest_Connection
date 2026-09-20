@@ -38,6 +38,12 @@ export interface BlockSeatingConfigSnapshot {
   autoFillStraightSeatPositions?: Record<string, CustomShapeSeatPosition>;
   customSeatBlocks?: CustomShapeSeatBlock[];
   customSideLengthsM?: number[];
+  /** Per-edge side labels (layout shell strip — lives with seating config). */
+  customSideNames?: string[];
+  /** Per logical side real-world metres + labels (edit / measure source of truth). */
+  gaConfiguredSides?: GaConfiguredSide[];
+  /** Display name of the applied master config (restored on hydrate). */
+  appliedConfigName?: string;
   dragSeatsMode?: boolean;
   dragSeatsStadiumSideIndex?: number;
   dragSeatsStadiumSideIndices?: number[];
@@ -51,6 +57,10 @@ export interface BlockSeatingConfigSnapshot {
   defineByRowColumnRows?: number;
   defineByRowColumnColumns?: number;
   blockViewpointAngleDeg?: number;
+  /** When true, viewpoint was confirmed manually (not auto toward ground). */
+  blockViewpointManuallySet?: boolean;
+  /** Which end of each row holds seat 1 (spectator facing VIEW POINT). */
+  seatStartSide?: 'left' | 'right';
   labelOffsetXPct?: number;
   labelOffsetYPct?: number;
 }

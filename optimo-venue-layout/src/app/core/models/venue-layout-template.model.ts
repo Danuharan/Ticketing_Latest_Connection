@@ -49,4 +49,12 @@ export interface UpdateVenueTemplateInput {
   description?: string;
   layoutConfig?: VenueLayoutConfig;
   status?: VenueTemplateStatus;
+  /** Blocks the user deleted — their venue_block_configurations rows are removed. */
+  deletedBlockElementIds?: readonly string[];
+  /**
+   * True when `layoutConfig` still has blocks whose seating was never fetched.
+   * The saved thumbnail is then left alone, since it cannot be redrawn without
+   * every block's seats.
+   */
+  hasUnfetchedSeating?: boolean;
 }

@@ -104,6 +104,16 @@ export interface CustomShapeSeatBlock {
   rowLines?: ElementPosition[][];
 }
 
+/**
+ * Row / column / seat totals kept on the geometry shell so hover badges and
+ * counts work before a block's seating config is fetched.
+ */
+export interface BlockSeatingSummary {
+  rows: number;
+  columns: number;
+  totalSeats: number;
+}
+
 /** Default real-world dimensions (metres) for custom blocks and chairs. */
 export const DEFAULT_BLOCK_LENGTH_M = 10;
 export const DEFAULT_BLOCK_WIDTH_M = 8;
@@ -488,6 +498,11 @@ export interface CenterpieceElement extends ElementBase {
   appliedConfigName?: string;
   /** Stable uuid for venue_block_configurations.block_id (shell identity). */
   venueBlockId?: string;
+  /**
+   * Seat totals stamped onto the shell when seating is split out. Read whenever
+   * `seatLayout` is absent because the block's config has not been fetched yet.
+   */
+  seatingSummary?: BlockSeatingSummary;
   /** Viewpoint angle (deg) around this block — 0 = above, like a stage label. */
   blockViewpointAngleDeg?: number;
   /** When true, viewpoint was confirmed manually in block workspace (not auto toward ground). */

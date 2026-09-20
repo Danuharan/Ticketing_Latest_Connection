@@ -1,5 +1,6 @@
 import type { VenueLayoutConfig } from '../../../core/models/venue-layout-config.model';
 import type { BlockSeatingConfigSnapshot } from '../../layout-designer/models/block-config-template.model';
+import { getSeatingBlockStoredStats } from '../../layout-designer/lib/custom-shape-seats';
 import {
   extractSeatingSnapshot,
   seatingSnapshotToPatch,
@@ -38,11 +39,17 @@ const SEATING_FIELD_KEYS: Array<keyof CenterpieceElement> = [
   'defineByRowColumnRows',
   'defineByRowColumnColumns',
   'blockViewpointAngleDeg',
+  'blockViewpointManuallySet',
+  'seatStartSide',
   'labelOffsetXPct',
   'labelOffsetYPct',
   'seatFacingDeg',
   'borderGapM',
   'interactiveSeatingLocked',
+  'gaConfiguredSides',
+  'customSideNames',
+  'appliedConfigId',
+  'appliedConfigName',
 ];
 
 export interface BlockSeatingPersistEntry {
@@ -62,7 +69,9 @@ function hasPersistedSeating(snapshot: BlockSeatingConfigSnapshot): boolean {
       (snapshot.seatPositionOverrides && Object.keys(snapshot.seatPositionOverrides).length > 0) ||
       snapshot.customLineSeatRows?.length ||
       (snapshot.rows != null && snapshot.rows > 0) ||
-      (snapshot.seatsPerRow != null && snapshot.seatsPerRow > 0),
+      (snapshot.seatsPerRow != null && snapshot.seatsPerRow > 0) ||
+      (snapshot.gaConfiguredSides?.length ?? 0) > 0 ||
+      (snapshot.customSideLengthsM?.length ?? 0) > 0,
   );
 }
 
@@ -121,22 +130,58 @@ function stripSeatingFromElement(el: LayoutElement): LayoutElement {
     return el;
   }
   const copy = { ...el } as CenterpieceElement;
+  // Read before stripping — getSeatingBlockStoredStats needs the seating fields,
+  // and falls back to the summary the element was loaded with when they are absent.
+  const summary = getSeatingBlockStoredStats(el);
   for (const key of SEATING_FIELD_KEYS) {
     delete copy[key];
   }
-  // Keep identity / type / master link on the shell.
+  if (summary.totalSeats > 0 || summary.rows > 0) {
+    copy.seatingSummary = summary;
+  } else {
+    delete copy.seatingSummary;
+  }
+  // Keep geometry + venueBlockId / blockType on the shell; seating lives in block configs.
   return copy;
+}
+
+export interface BlockSeatingConfigRow {
+  element_id: string;
+  block_id: string;
+  master_config_template_id: string | null;
+  config: { seating?: BlockSeatingConfigSnapshot };
+}
+
+/**
+ * Fields a stored config contributes back to its shell element. Used both when
+ * hydrating a whole layout and when fetching one block on demand.
+ */
+export function seatingRowToElementPatch(
+  row: BlockSeatingConfigRow,
+  el: CenterpieceElement,
+): Partial<CenterpieceElement> | null {
+  const s = row.config?.seating;
+  if (!s) {
+    return null;
+  }
+  return {
+    ...seatingSnapshotToPatch(s),
+    // Legacy rows kept these on the shell — prefer snapshot, fall back to shell.
+    gaConfiguredSides: s.gaConfiguredSides ?? el.gaConfiguredSides,
+    customSideNames: s.customSideNames ?? el.customSideNames,
+    appliedConfigName: s.appliedConfigName ?? el.appliedConfigName,
+    seatStartSide: s.seatStartSide ?? el.seatStartSide,
+    blockViewpointManuallySet: s.blockViewpointManuallySet ?? el.blockViewpointManuallySet,
+    venueBlockId: row.block_id,
+    appliedConfigId: row.master_config_template_id ?? el.appliedConfigId,
+    blockType: el.blockType ?? 'seating',
+  };
 }
 
 /** Merges per-block seating configs back onto layout elements (by element_id). */
 export function mergeSeatingIntoLayout(
   layout: VenueLayoutConfig,
-  configs: Array<{
-    element_id: string;
-    block_id: string;
-    master_config_template_id: string | null;
-    config: { seating?: BlockSeatingConfigSnapshot };
-  }>,
+  configs: BlockSeatingConfigRow[],
 ): VenueLayoutConfig {
   const byElement = new Map(configs.map((row) => [row.element_id, row]));
   const next = structuredClone(layout);
@@ -145,16 +190,8 @@ export function mergeSeatingIntoLayout(
       return el;
     }
     const row = byElement.get(el.id);
-    if (!row?.config?.seating) {
-      return el;
-    }
-    return {
-      ...el,
-      ...seatingSnapshotToPatch(row.config.seating),
-      venueBlockId: row.block_id,
-      appliedConfigId: row.master_config_template_id ?? el.appliedConfigId,
-      blockType: el.blockType ?? 'seating',
-    };
+    const patch = row ? seatingRowToElementPatch(row, el) : null;
+    return patch ? { ...el, ...patch } : el;
   });
   return next;
 }

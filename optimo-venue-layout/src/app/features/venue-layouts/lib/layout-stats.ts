@@ -20,7 +20,7 @@ export function countBlocksInLayout(
     if (el.type === 'block-grid' || el.type === 'seat-section') {
       return total + 1;
     }
-    if (el.type === 'centerpiece' && isCustomShapeSeatingEnabled(el)) {
+    if (el.type === 'centerpiece' && (isCustomShapeSeatingEnabled(el) || el.seatingSummary)) {
       const rect = rectFromPositionSize(el.position, el.size, canvas);
       return total + (getCustomShapeVisibleSeatCount(el, rect) > 0 ? 1 : 0);
     }
@@ -52,6 +52,11 @@ function countSeatsOnElement(
   el: LayoutElement,
   _canvas: VenueLayoutConfig['canvas'],
 ): number {
+  if (el.type === 'centerpiece') {
+    // Shell-only blocks are counted from their stored summary, so this must not
+    // go through hasSeats() — that gate needs the seating fields in memory.
+    return getCustomShapeVisibleSeatCount(el);
+  }
   if (!hasSeats(el)) {
     return 0;
   }
@@ -67,8 +72,6 @@ function countSeatsOnElement(
       );
     case 'layer-rect':
       return el.blocks.reduce((sum, b) => sum + Math.max(0, b.rows) * Math.max(0, b.seatsPerRow), 0);
-    case 'centerpiece':
-      return getCustomShapeVisibleSeatCount(el);
     default:
       return 0;
   }

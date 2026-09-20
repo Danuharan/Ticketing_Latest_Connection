@@ -159,10 +159,16 @@ const SHAPE_SEAT_BORDER_PADDING_PITCH_FLOOR_RATIO = 0.15;
 
 export function resolveShapeSeatBorderPaddingPx(pitchPx: number, spanPx: number): number {
   if (spanPx <= 0 || pitchPx <= 0) {
-    return SHAPE_SEAT_BORDER_EDGE_GAP_MIN_PX;
+    return Math.min(SHAPE_SEAT_BORDER_EDGE_GAP_MIN_PX, Math.max(0.05, pitchPx * 0.3));
   }
+  // Absolute 3px floor only when pitch itself is large enough; otherwise the
+  // gap must shrink with metre packing or small canvas blocks leave empty bands.
+  const absoluteFloor =
+    pitchPx >= SHAPE_SEAT_BORDER_EDGE_GAP_MIN_PX
+      ? SHAPE_SEAT_BORDER_EDGE_GAP_MIN_PX
+      : pitchPx * SHAPE_SEAT_BORDER_PADDING_PITCH_FLOOR_RATIO;
   return Math.max(
-    SHAPE_SEAT_BORDER_EDGE_GAP_MIN_PX,
+    absoluteFloor,
     pitchPx * SHAPE_SEAT_BORDER_PADDING_PITCH_FLOOR_RATIO,
     Math.min(
       pitchPx * SHAPE_SEAT_BORDER_PADDING_PITCH_RATIO,
@@ -172,10 +178,11 @@ export function resolveShapeSeatBorderPaddingPx(pitchPx: number, spanPx: number)
 }
 
 export function resolveSeatBodyRadiusPx(pitchPx: number, rowHeightPx?: number): number {
+  const floor = Math.max(0.05, pitchPx * 0.2);
   if (rowHeightPx != null && rowHeightPx > 0) {
-    return Math.max(2.8, Math.min(rowHeightPx * 0.34, pitchPx * 0.42));
+    return Math.max(floor, Math.min(rowHeightPx * 0.34, pitchPx * 0.42));
   }
-  return Math.max(2.8, pitchPx * 0.42);
+  return Math.max(floor, pitchPx * 0.42);
 }
 
 /** Minimum distance from seat centre to polygon edge (seat radius + border-to-seat gap). */
@@ -2460,6 +2467,10 @@ export function getSeatingBlockStoredStats(
       totalSeats += stats.totalSeats;
     }
     return { rows, columns, totalSeats };
+  }
+  if (element.seatLayout == null && !(element.rows && element.seatsPerRow)) {
+    // Seating config not fetched yet — the shell summary is the only source.
+    return element.seatingSummary ?? { rows: 0, columns: 0, totalSeats: 0 };
   }
   return storedStatsFromLayoutSource(element);
 }

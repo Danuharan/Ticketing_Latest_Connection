@@ -99,7 +99,11 @@ export function chairScalesFromSeatPitch(
   const colPitchM = chairWidthM + seatGapM;
   const rowPitchM = chairLengthM + rowGapM;
   const pxPerM = colPitchM > 0 ? pitchPx / colPitchM : 0;
-  const clampScale = (value: number): number => Math.max(0.28, Math.min(3, value));
+  // Never draw a chair larger than ~90% of its pitch — otherwise dense metre
+  // packs on a small canvas block melt into a solid blob.
+  const maxScaleForPitch = pitchPx > 0 ? (pitchPx * 0.9) / SEAT_GRAPHIC_SIZE : 3;
+  const clampScale = (value: number): number =>
+    Math.max(0.02, Math.min(3, maxScaleForPitch, value));
   if (chairWidthM > 0 && pxPerM > 0 && rowPitchM > 0) {
     return {
       chairScale: clampScale((chairWidthM * pxPerM) / SEAT_GRAPHIC_SIZE),
@@ -107,7 +111,7 @@ export function chairScalesFromSeatPitch(
     };
   }
   const scale = chairScaleFromPitchPx(pitchPx);
-  return { chairScale: scale, chairScaleY: scale };
+  return { chairScale: clampScale(scale), chairScaleY: clampScale(scale) };
 }
 
 /** Hit target sized to the squircle — avoids selecting the neighbouring seat. */

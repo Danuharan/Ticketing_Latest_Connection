@@ -5,6 +5,7 @@ import { buildLayoutThumbnailDataUrl } from '../lib/layout-preview-thumbnail';
 import {
   mergeSeatingIntoLayout,
   stripSeatingFromLayout,
+  type BlockSeatingConfigRow,
 } from '../lib/layout-seating-split';
 import { VenueLayoutConfig } from '../../../core/models/venue-layout-config.model';
 import {
@@ -87,7 +88,15 @@ export class VenueTemplateService {
     };
   }
 
-  async getTemplateById(id: string): Promise<VenueLayoutTemplate> {
+  /**
+   * @param options.withSeating When false, per-block seating configs are not
+   *   fetched and `layout_config` stays a geometry shell. The designer uses this
+   *   and pulls each block's seating when the user opens it.
+   */
+  async getTemplateById(
+    id: string,
+    options?: { withSeating?: boolean },
+  ): Promise<VenueLayoutTemplate> {
     const { data, error } = await this.supabase
       .from('venue_layout_templates')
       .select('*')
@@ -98,7 +107,17 @@ export class VenueTemplateService {
       throw new Error(error.message);
     }
 
-    return this.rowToTemplate(await this.hydrateRow(data as TemplateRow));
+    return this.rowToTemplate(
+      await this.hydrateRow(data as TemplateRow, options?.withSeating !== false),
+    );
+  }
+
+  /** One block's stored seating, for on-demand hydration in the designer. */
+  async getBlockSeatingRow(
+    venueId: string,
+    elementId: string,
+  ): Promise<BlockSeatingConfigRow | null> {
+    return this.blockConfigs.getForElement(venueId, elementId);
   }
 
   async createTemplate(input: CreateVenueTemplateInput): Promise<string> {
@@ -154,13 +173,20 @@ export class VenueTemplateService {
     if (input.layoutConfig !== undefined) {
       this.validateLayout(input.layoutConfig);
       const fullLayout = structuredClone(input.layoutConfig);
+      // Counts come from each block's stored summary, so they stay correct even
+      // when seating was not fetched. The thumbnail cannot be, so keep the old one.
       const metadata = this.buildListMetadata(fullLayout);
+      if (input.hasUnfetchedSeating) {
+        delete (metadata as Partial<typeof metadata>).preview_thumbnail;
+      }
       Object.assign(patch, metadata);
       const venueName =
         input.name?.trim() ||
         (await this.fetchVenueName(id)) ||
         'Venue';
-      await this.persistShellAndSeating(id, venueName, fullLayout, userId);
+      await this.persistShellAndSeating(id, venueName, fullLayout, userId, {
+        deletedElementIds: input.deletedBlockElementIds,
+      });
     }
 
     const { error } = await this.supabase.from('venue_layout_templates').update(patch).eq('id', id);
@@ -185,8 +211,9 @@ export class VenueTemplateService {
     venueName: string,
     fullLayout: VenueLayoutConfig,
     userId: string,
+    options?: { deletedElementIds?: readonly string[] },
   ): Promise<void> {
-    const stamped = await this.blockConfigs.syncFromLayout(venueId, fullLayout, venueName);
+    const stamped = await this.blockConfigs.syncFromLayout(venueId, fullLayout, venueName, options);
     const shell = stripSeatingFromLayout(stamped);
     const layoutConfig = await this.images.prepareLayoutForPersist(shell, venueId);
     const { error } = await this.supabase
@@ -252,11 +279,13 @@ export class VenueTemplateService {
     }
   }
 
-  private async hydrateRow(row: TemplateRow): Promise<TemplateRow> {
+  private async hydrateRow(row: TemplateRow, withSeating: boolean): Promise<TemplateRow> {
     let layout = row.layout_config as VenueLayoutConfig;
-    const configs = await this.blockConfigs.listForVenue(row.id);
-    if (configs.length > 0) {
-      layout = mergeSeatingIntoLayout(layout, configs);
+    if (withSeating) {
+      const configs = await this.blockConfigs.listForVenue(row.id);
+      if (configs.length > 0) {
+        layout = mergeSeatingIntoLayout(layout, configs);
+      }
     }
     const hydrated = await this.images.hydrateLayoutForDisplay(layout);
     return { ...row, layout_config: hydrated };
