@@ -300,6 +300,126 @@
   opacity: 0.75;
 }
 
+.save-progress-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 280;
+  display: grid;
+  place-items: center;
+  background: rgb(15 23 42 / 0.45);
+  backdrop-filter: blur(2px);
+  padding: 1rem;
+}
+
+.save-progress-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: min(20rem, 100%);
+  max-width: 22rem;
+  border-radius: 0.875rem;
+  background: #fff;
+  padding: 1.35rem 1.5rem 1.25rem;
+  box-shadow: 0 20px 40px -12px rgb(15 23 42 / 0.35);
+  text-align: center;
+}
+
+.dark .save-progress-card {
+  background: #0f172a;
+  color: #f8fafc;
+  box-shadow: 0 20px 40px -12px rgb(0 0 0 / 0.55);
+}
+
+.save-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.save-progress-ring {
+  --pct: 0;
+  position: relative;
+  width: 3.5rem;
+  height: 3.5rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: conic-gradient(#16a34a calc(var(--pct) * 1%), #dcfce7 0);
+  transition: background 120ms linear;
+}
+
+.save-progress-ring__hole {
+  position: absolute;
+  inset: 0.45rem;
+  border-radius: 9999px;
+  background: #fff;
+}
+
+.dark .save-progress-ring {
+  background: conic-gradient(#22c55e calc(var(--pct) * 1%), #14532d 0);
+}
+
+.dark .save-progress-ring__hole {
+  background: #0f172a;
+}
+
+.save-progress-pct {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #15803d;
+  font-variant-numeric: tabular-nums;
+  min-width: 3.5rem;
+  text-align: left;
+}
+
+.dark .save-progress-pct {
+  color: #4ade80;
+}
+
+.save-progress-card__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #0f172a;
+}
+
+.dark .save-progress-card__title {
+  color: #f8fafc;
+}
+
+.save-progress-card__hint {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.dark .save-progress-card__hint {
+  color: #94a3b8;
+}
+
+.save-progress-success {
+  display: grid;
+  place-items: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 9999px;
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.save-progress-success svg {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.dark .save-progress-success {
+  background: #14532d;
+  color: #4ade80;
+}
+
 .designer-field__input--warn {
   border-color: #f59e0b;
   outline-color: rgb(245 158 11 / 0.25);
@@ -471,6 +591,7 @@
 .designer-canvas-box.canvas-viewport {
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .designer-canvas-loading {
@@ -525,6 +646,84 @@
   min-height: calc(100dvh - var(--designer-admin-header));
   padding: 0.5rem;
   gap: 0.5rem;
+}
+
+.autofill-top-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-shrink: 0;
+  width: 100%;
+  padding: 0.15rem 0 0.35rem;
+}
+
+/* Sits on top of the venue canvas so sticky full-height layout cannot hide it. */
+.autofill-top-progress--overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  margin: 0;
+  padding: 0.45rem 7.5rem 0.45rem 0.65rem;
+  background: rgb(255 255 255 / 0.92);
+  border-bottom: 1px solid rgb(22 163 74 / 0.25);
+  box-shadow: 0 4px 12px rgb(15 23 42 / 0.08);
+  pointer-events: none;
+}
+
+.dark .autofill-top-progress--overlay {
+  background: rgb(15 23 42 / 0.92);
+  border-bottom-color: rgb(34 197 94 / 0.3);
+}
+
+.autofill-top-progress__track {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 0.55rem;
+  border-radius: 9999px;
+  background: #dcfce7;
+  overflow: hidden;
+}
+
+.dark .autofill-top-progress__track {
+  background: #14532d;
+}
+
+.autofill-top-progress__fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: #16a34a;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 80ms linear;
+  will-change: transform;
+}
+
+.autofill-top-progress__fill--done {
+  background: #15803d;
+}
+
+.dark .autofill-top-progress__fill,
+.dark .autofill-top-progress__fill--done {
+  background: #22c55e;
+}
+
+.autofill-top-progress__pct {
+  flex: 0 0 auto;
+  min-width: 2.75rem;
+  text-align: right;
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: #15803d;
+}
+
+.dark .autofill-top-progress__pct {
+  color: #4ade80;
 }
 
 .designer-workspace__grid--autofill {

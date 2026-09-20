@@ -434,6 +434,8 @@ export class LayoutCanvasService {
   readonly autoFillLayoutMode = signal(false);
   /** True while seats are being placed row-by-row for visual feedback. */
   readonly autoFillAnimating = signal(false);
+  /** 0–100 while Auto Fill animation is placing seats. */
+  readonly autoFillProgressPct = signal(0);
   /** Other blocks updated after reference block measurement sync — shown in configure UI. */
   readonly workspaceMeasurementSyncInfo = signal<WorkspaceMeasurementSyncEntry[]>([]);
 
@@ -6199,6 +6201,7 @@ export class LayoutCanvasService {
   cancelAutoFillAnimation(): void {
     this.autoFillAnimationToken += 1;
     this.autoFillAnimating.set(false);
+    this.autoFillProgressPct.set(0);
   }
 
   /** Remember seating state before Auto Fill writes seats (first capture wins). */
@@ -6256,6 +6259,7 @@ export class LayoutCanvasService {
     this.cancelAutoFillAnimation();
     const token = ++this.autoFillAnimationToken;
     this.autoFillAnimating.set(true);
+    this.autoFillProgressPct.set(0);
     this.autoFillError.set(null);
     this.autoFillLastResult.set(null);
 
@@ -6325,10 +6329,12 @@ export class LayoutCanvasService {
       });
 
     const batchSize = Math.max(1, Math.ceil(jobs.length / AUTO_FILL_ANIMATION_MAX_FRAMES));
+    const jobTotal = Math.max(1, jobs.length);
 
     for (let index = 0; index < jobs.length; index += batchSize) {
       if (token !== this.autoFillAnimationToken) {
         this.autoFillAnimating.set(false);
+        this.autoFillProgressPct.set(0);
         return null;
       }
 
@@ -6341,7 +6347,13 @@ export class LayoutCanvasService {
         this.applyPatch(elementId, patch);
       }
 
+      const done = Math.min(jobs.length, index + batchSize);
+      this.autoFillProgressPct.set(Math.round((done / jobTotal) * 100));
       await waitFrame();
+    }
+
+    if (jobs.length === 0) {
+      this.autoFillProgressPct.set(100);
     }
 
     for (const el of blocksAfterSync) {
@@ -6368,7 +6380,14 @@ export class LayoutCanvasService {
     };
 
     this.autoFillLastResult.set(batch);
+    this.autoFillProgressPct.set(100);
     this.autoFillAnimating.set(false);
+    // Keep 100% visible briefly, then clear the top bar.
+    window.setTimeout(() => {
+      if (token === this.autoFillAnimationToken) {
+        this.autoFillProgressPct.set(0);
+      }
+    }, 700);
     if (batch.failureCount > 0 && batch.successCount === 0) {
       this.autoFillError.set(
         batch.results.find((r) => !r.success)?.error ??

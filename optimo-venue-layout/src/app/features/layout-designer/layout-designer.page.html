@@ -727,6 +727,26 @@
           class="designer-box designer-canvas-box canvas-viewport"
           [class.canvas-viewport--panning]="canvas.viewportPanning()"
         >
+          @if (showAutoFillTopProgress()) {
+            @let pct = autoFillTopProgressPct();
+            <div
+              class="autofill-top-progress autofill-top-progress--overlay"
+              role="progressbar"
+              [attr.aria-valuenow]="pct"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              [attr.aria-label]="saveProgressOpen() ? saveProgressMessage() : 'Auto Fill progress'"
+            >
+              <div class="autofill-top-progress__track">
+                <div
+                  class="autofill-top-progress__fill"
+                  [class.autofill-top-progress__fill--done]="saveProgressSuccess() || pct >= 100"
+                  [style.transform]="'scaleX(' + pct / 100 + ')'"
+                ></div>
+              </div>
+              <span class="autofill-top-progress__pct">{{ pct }}%</span>
+            </div>
+          }
           <app-canvas-stage />
           @if (showCanvasLoadingOverlay()) {
             <div class="designer-canvas-loading" role="status" aria-live="polite">
@@ -826,6 +846,37 @@
       </div>
     </div>
   </section>
+  }
+
+  @if (showSaveProgressModal()) {
+    <div class="save-progress-overlay" role="status" aria-live="polite">
+      <div class="save-progress-card">
+        @if (saveProgressSuccess()) {
+          <div class="save-progress-success" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          </div>
+          <p class="save-progress-card__title">{{ saveProgressMessage() }}</p>
+        } @else {
+          <div class="save-progress-row">
+            <div
+              class="save-progress-ring"
+              [style.--pct]="saveProgressPct()"
+              [attr.aria-valuenow]="saveProgressPct()"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              role="progressbar"
+            >
+              <span class="save-progress-ring__hole"></span>
+            </div>
+            <span class="save-progress-pct">{{ saveProgressPct() }}%</span>
+          </div>
+          <p class="save-progress-card__title">{{ saveProgressMessage() }}</p>
+          <p class="save-progress-card__hint">Please wait — large venues can take a moment.</p>
+        }
+      </div>
+    </div>
   }
 
   @if (!inAutoFillLayout() && canAddParking()) {

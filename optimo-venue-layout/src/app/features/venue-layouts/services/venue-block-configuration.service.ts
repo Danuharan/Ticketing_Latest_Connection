@@ -72,13 +72,17 @@ export class VenueBlockConfigurationService {
     venueLayoutTemplateId: string,
     layout: VenueLayoutConfig,
     venueName: string,
-    options?: { deletedElementIds?: readonly string[] },
+    options?: {
+      deletedElementIds?: readonly string[];
+      onProgress?: (done: number, total: number) => void;
+    },
   ): Promise<VenueLayoutConfig> {
     const userId = this.requireUserId();
     const withIds = ensureVenueBlockIds(layout);
     const entries = collectBlockSeatingEntries(withIds);
     const existing = await this.listForVenue(venueLayoutTemplateId);
     const existingByElement = new Map(existing.map((row) => [row.element_id, row]));
+    const report = (done: number, total: number) => options?.onProgress?.(done, total);
 
     // Only blocks the caller reports as deleted are removed. A block whose seating
     // was never fetched has no entry below, and must keep its stored config.
@@ -97,7 +101,11 @@ export class VenueBlockConfigurationService {
       }
     }
 
-    for (const entry of entries) {
+    const total = Math.max(1, entries.length);
+    report(0, total);
+
+    for (let i = 0; i < entries.length; i += 1) {
+      const entry = entries[i]!;
       // Persist display name on seating so it survives layout_config strip.
       entry.seating = {
         ...entry.seating,
@@ -113,6 +121,7 @@ export class VenueBlockConfigurationService {
         seatingConfigsEqual(prev.config?.seating, entry.seating)
       ) {
         this.stampShellIdentity(withIds, entry, prev.block_id, prev.master_config_template_id);
+        report(i + 1, total);
         continue;
       }
 
@@ -153,6 +162,11 @@ export class VenueBlockConfigurationService {
       }
 
       this.stampShellIdentity(withIds, entry, blockId, masterId);
+      report(i + 1, total);
+    }
+
+    if (entries.length === 0) {
+      report(1, 1);
     }
 
     return withIds;

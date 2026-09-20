@@ -240,6 +240,33 @@ export class LayoutDesignerPage implements OnInit, OnDestroy {
   protected readonly templateName = signal('');
   protected readonly description = signal('');
   protected readonly isSaving = signal(false);
+  /** 0–100 while Save as template / Auto Fill save is running. */
+  protected readonly saveProgressPct = signal(0);
+  /** Overlay visible from click until success dismiss / error. */
+  protected readonly saveProgressOpen = signal(false);
+  /** True after persist finishes — shows success state before navigate/toast. */
+  protected readonly saveProgressSuccess = signal(false);
+  protected readonly saveProgressMessage = signal('Saving template…');
+  /**
+   * Top line progress over the canvas — Auto Fill seat placement + Auto Fill Save.
+   * Not gated on inAutoFillLayout() so it still shows if chrome mode flips mid-run.
+   */
+  protected readonly autoFillTopProgressPct = computed(() => {
+    if (this.saveProgressOpen() && this.canvas.autoFillLayoutMode()) {
+      return this.saveProgressPct();
+    }
+    return this.canvas.autoFillProgressPct();
+  });
+  protected readonly showAutoFillTopProgress = computed(() => {
+    if (this.saveProgressOpen() && this.canvas.autoFillLayoutMode()) {
+      return true;
+    }
+    return this.canvas.autoFillAnimating() || this.canvas.autoFillProgressPct() > 0;
+  });
+  /** Centered circle overlay — only for footer "Save as template" (not Auto Fill). */
+  protected readonly showSaveProgressModal = computed(
+    () => this.saveProgressOpen() && !this.canvas.autoFillLayoutMode(),
+  );
   /** True while the template JSON is downloading from Supabase. */
   protected readonly isFetchingTemplate = signal(false);
   /** True while the canvas is hydrating after data arrives (overlay on canvas only). */
@@ -1023,56 +1050,60 @@ export class LayoutDesignerPage implements OnInit, OnDestroy {
       return;
     }
 
-    this.isSaving.set(true);
-    this.saveNotice.set(null);
+    this.beginSaveProgress('Saving seats to template…');
 
     try {
       const layoutConfig = this.canvas.exportLayoutConfig();
       const id = this.templateId();
+      const onProgress = (percent: number) => this.saveProgressPct.set(percent);
 
       if (id) {
         const deletedBlockElementIds = this.canvas.pendingBlockDeletions();
-        await this.templates.updateTemplate(id, {
-          name,
-          description: this.description(),
-          layoutConfig,
-          deletedBlockElementIds,
-          hasUnfetchedSeating: this.canvas.hasUnhydratedBlocks(),
-        });
+        await this.templates.updateTemplate(
+          id,
+          {
+            name,
+            description: this.description(),
+            layoutConfig,
+            deletedBlockElementIds,
+            hasUnfetchedSeating: this.canvas.hasUnhydratedBlocks(),
+          },
+          { onProgress },
+        );
         this.canvas.clearPendingBlockDeletions(deletedBlockElementIds);
         this.drafts.clear(this.drafts.storageKey(id));
         this.queryClient.invalidateQueries({ queryKey: venueTemplateKeys.list() });
         this.queryClient.invalidateQueries({ queryKey: venueTemplateKeys.detail(id) });
-        this.toast.success(
+        await this.finishSaveProgress(
           `Saved ${commit.totalSeats} seats across ${commit.savedCount} block${commit.savedCount === 1 ? '' : 's'} to the template.`,
         );
       } else {
-        const newId = await this.templates.createTemplate({
-          name,
-          description: this.description(),
-          layoutConfig,
-        });
+        const newId = await this.templates.createTemplate(
+          {
+            name,
+            description: this.description(),
+            layoutConfig,
+          },
+          { onProgress },
+        );
         if (this.newSessionId) {
           this.drafts.clear(this.drafts.storageKey(null, this.newSessionId));
         }
         this.drafts.clearLegacyNewDraft();
         this.templateId.set(newId);
         this.newSessionId = null;
-        await this.router.navigate(['/venue-layouts', newId, 'edit'], { replaceUrl: true });
         this.queryClient.invalidateQueries({ queryKey: venueTemplateKeys.list() });
         this.queryClient.invalidateQueries({ queryKey: venueTemplateKeys.detail(newId) });
-        this.toast.success(
+        await this.finishSaveProgress(
           `Saved ${commit.totalSeats} seats across ${commit.savedCount} block${commit.savedCount === 1 ? '' : 's'} to your template library.`,
         );
+        await this.router.navigate(['/venue-layouts', newId, 'edit'], { replaceUrl: true });
       }
       this.persistDraft();
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Save failed.';
-      this.saveNotice.set(msg);
-      this.toast.error(msg);
+      this.failSaveProgress(msg);
       this.persistDraft();
-    } finally {
-      this.isSaving.set(false);
     }
   }
 
@@ -1089,49 +1120,81 @@ export class LayoutDesignerPage implements OnInit, OnDestroy {
       return;
     }
 
-    this.isSaving.set(true);
-    this.saveNotice.set(null);
+    this.beginSaveProgress('Saving template…');
 
     try {
       const layoutConfig = this.canvas.exportLayoutConfig();
       const id = this.templateId();
+      const onProgress = (percent: number) => this.saveProgressPct.set(percent);
 
       if (id) {
         const deletedBlockElementIds = this.canvas.pendingBlockDeletions();
-        await this.templates.updateTemplate(id, {
-          name,
-          description: this.description(),
-          layoutConfig,
-          deletedBlockElementIds,
-          hasUnfetchedSeating: this.canvas.hasUnhydratedBlocks(),
-        });
+        await this.templates.updateTemplate(
+          id,
+          {
+            name,
+            description: this.description(),
+            layoutConfig,
+            deletedBlockElementIds,
+            hasUnfetchedSeating: this.canvas.hasUnhydratedBlocks(),
+          },
+          { onProgress },
+        );
         this.canvas.clearPendingBlockDeletions(deletedBlockElementIds);
         this.drafts.clear(this.drafts.storageKey(id));
         this.queryClient.invalidateQueries({ queryKey: venueTemplateKeys.list() });
         this.queryClient.invalidateQueries({ queryKey: venueTemplateKeys.detail(id) });
-        this.toast.success('Template saved.');
+        await this.finishSaveProgress('Template saved successfully.');
         await this.router.navigate(['/venue-layouts']);
       } else {
-        await this.templates.createTemplate({
-          name,
-          description: this.description(),
-          layoutConfig,
-        });
+        await this.templates.createTemplate(
+          {
+            name,
+            description: this.description(),
+            layoutConfig,
+          },
+          { onProgress },
+        );
         if (this.newSessionId) {
           this.drafts.clear(this.drafts.storageKey(null, this.newSessionId));
         }
         this.drafts.clearLegacyNewDraft();
         this.queryClient.invalidateQueries({ queryKey: venueTemplateKeys.list() });
-        this.toast.success('Saved to your template library.');
+        await this.finishSaveProgress('Saved to your template library.');
         await this.router.navigate(['/venue-layouts']);
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Save failed.';
-      this.saveNotice.set(msg);
-      this.toast.error(msg);
-    } finally {
-      this.isSaving.set(false);
+      this.failSaveProgress(msg);
     }
+  }
+
+  private beginSaveProgress(message: string): void {
+    this.isSaving.set(true);
+    this.saveNotice.set(null);
+    this.saveProgressPct.set(0);
+    this.saveProgressSuccess.set(false);
+    this.saveProgressMessage.set(message);
+    this.saveProgressOpen.set(true);
+  }
+
+  private async finishSaveProgress(message: string): Promise<void> {
+    this.saveProgressPct.set(100);
+    this.saveProgressSuccess.set(true);
+    this.saveProgressMessage.set(message);
+    this.toast.success(message);
+    await new Promise<void>((resolve) => setTimeout(resolve, 900));
+    this.saveProgressOpen.set(false);
+    this.saveProgressSuccess.set(false);
+    this.isSaving.set(false);
+  }
+
+  private failSaveProgress(message: string): void {
+    this.saveNotice.set(message);
+    this.toast.error(message);
+    this.saveProgressOpen.set(false);
+    this.saveProgressSuccess.set(false);
+    this.isSaving.set(false);
   }
 
   private beginNewLayout(sessionKey: string): void {

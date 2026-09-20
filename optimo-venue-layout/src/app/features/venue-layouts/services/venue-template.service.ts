@@ -120,12 +120,18 @@ export class VenueTemplateService {
     return this.blockConfigs.getForElement(venueId, elementId);
   }
 
-  async createTemplate(input: CreateVenueTemplateInput): Promise<string> {
+  async createTemplate(
+    input: CreateVenueTemplateInput,
+    options?: { onProgress?: (percent: number) => void },
+  ): Promise<string> {
     const userId = this.requireUserId();
+    const report = (percent: number) => options?.onProgress?.(Math.max(0, Math.min(100, Math.round(percent))));
+    report(2);
     this.validateLayout(input.layoutConfig);
     const fullLayout = structuredClone(input.layoutConfig);
     const metadata = this.buildListMetadata(fullLayout);
     const venueName = input.name.trim();
+    report(8);
 
     // Insert shell first (no seats) so FK for venue_block_configurations exists.
     const shellWithoutImage = stripSeatingFromLayout(fullLayout);
@@ -152,12 +158,22 @@ export class VenueTemplateService {
     }
 
     const newId = data.id as string;
-    await this.persistShellAndSeating(newId, venueName, fullLayout, userId);
+    report(12);
+    await this.persistShellAndSeating(newId, venueName, fullLayout, userId, {
+      onProgress: (done, total) => report(12 + (done / Math.max(1, total)) * 80),
+    });
+    report(100);
     return newId;
   }
 
-  async updateTemplate(id: string, input: UpdateVenueTemplateInput): Promise<void> {
+  async updateTemplate(
+    id: string,
+    input: UpdateVenueTemplateInput,
+    options?: { onProgress?: (percent: number) => void },
+  ): Promise<void> {
     const userId = this.requireUserId();
+    const report = (percent: number) => options?.onProgress?.(Math.max(0, Math.min(100, Math.round(percent))));
+    report(2);
     const patch: Record<string, unknown> = { updated_by: userId };
 
     if (input.name !== undefined) {
@@ -180,19 +196,24 @@ export class VenueTemplateService {
         delete (metadata as Partial<typeof metadata>).preview_thumbnail;
       }
       Object.assign(patch, metadata);
+      report(8);
       const venueName =
         input.name?.trim() ||
         (await this.fetchVenueName(id)) ||
         'Venue';
+      report(12);
       await this.persistShellAndSeating(id, venueName, fullLayout, userId, {
         deletedElementIds: input.deletedBlockElementIds,
+        onProgress: (done, total) => report(12 + (done / Math.max(1, total)) * 80),
       });
+      report(94);
     }
 
     const { error } = await this.supabase.from('venue_layout_templates').update(patch).eq('id', id);
     if (error) {
       throw new Error(error.message);
     }
+    report(100);
   }
 
   async deleteTemplate(id: string): Promise<void> {
@@ -211,7 +232,10 @@ export class VenueTemplateService {
     venueName: string,
     fullLayout: VenueLayoutConfig,
     userId: string,
-    options?: { deletedElementIds?: readonly string[] },
+    options?: {
+      deletedElementIds?: readonly string[];
+      onProgress?: (done: number, total: number) => void;
+    },
   ): Promise<void> {
     const stamped = await this.blockConfigs.syncFromLayout(venueId, fullLayout, venueName, options);
     const shell = stripSeatingFromLayout(stamped);

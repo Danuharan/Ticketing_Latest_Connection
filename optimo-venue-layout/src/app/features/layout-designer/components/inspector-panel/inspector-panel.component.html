@@ -72,7 +72,7 @@
       <p class="insp__status">
         {{ selectedAutoFillBlocks().length }} block{{ selectedAutoFillBlocks().length === 1 ? '' : 's' }} selected
         @if (autoFillAnimating()) {
-          <span> · placing seats…</span>
+          <span> · placing seats… {{ canvas.autoFillProgressPct() }}%</span>
         }
       </p>
       @if (showAutoFillSameColorDeselect()) {
