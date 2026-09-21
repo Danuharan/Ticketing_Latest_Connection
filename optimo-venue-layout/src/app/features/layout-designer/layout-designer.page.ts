@@ -252,20 +252,29 @@ export class LayoutDesignerPage implements OnInit, OnDestroy {
    * Not gated on inAutoFillLayout() so it still shows if chrome mode flips mid-run.
    */
   protected readonly autoFillTopProgressPct = computed(() => {
-    if (this.saveProgressOpen() && this.canvas.autoFillLayoutMode()) {
+    if (
+      this.saveProgressOpen() &&
+      (this.canvas.autoFillLayoutMode() || this.inBlockWorkspace())
+    ) {
       return this.saveProgressPct();
     }
     return this.canvas.autoFillProgressPct();
   });
   protected readonly showAutoFillTopProgress = computed(() => {
-    if (this.saveProgressOpen() && this.canvas.autoFillLayoutMode()) {
+    if (
+      this.saveProgressOpen() &&
+      (this.canvas.autoFillLayoutMode() || this.inBlockWorkspace())
+    ) {
       return true;
     }
     return this.canvas.autoFillAnimating() || this.canvas.autoFillProgressPct() > 0;
   });
-  /** Centered circle overlay — only for footer "Save as template" (not Auto Fill). */
+  /** Centered circle overlay — footer Save as template only. */
   protected readonly showSaveProgressModal = computed(
-    () => this.saveProgressOpen() && !this.canvas.autoFillLayoutMode(),
+    () =>
+      this.saveProgressOpen() &&
+      !this.canvas.autoFillLayoutMode() &&
+      !this.inBlockWorkspace(),
   );
   /** True while the template JSON is downloading from Supabase. */
   protected readonly isFetchingTemplate = signal(false);
@@ -1107,6 +1116,89 @@ export class LayoutDesignerPage implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Block workspace — save aisle/gap/seat edits on blocks that already have seats
+   * (no Auto Fill layout mode required).
+   */
+  protected async saveSeatedBlockChanges(): Promise<void> {
+    const commit = this.canvas.summarizeAlreadySeatedBlocks();
+    if (!commit) {
+      this.toast.error('Create seats on a block first, then save your changes.');
+      return;
+    }
+
+    const name = this.templateName().trim();
+    if (!name) {
+      this.persistDraft();
+      this.toast.success(
+        `Draft kept with ${commit.totalSeats} seats. Enter a template name at the top, then save again to store in the library.`,
+      );
+      const input = this.templateNameInput()?.nativeElement;
+      input?.focus({ preventScroll: true });
+      input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
+    this.canvas.lockAlreadySeatedBlocks();
+    this.beginSaveProgress('Saving seating changes…');
+
+    try {
+      const layoutConfig = this.canvas.exportLayoutConfig();
+      const id = this.templateId();
+      const onProgress = (percent: number) => this.saveProgressPct.set(percent);
+
+      if (id) {
+        const deletedBlockElementIds = this.canvas.pendingBlockDeletions();
+        await this.templates.updateTemplate(
+          id,
+          {
+            name,
+            description: this.description(),
+            layoutConfig,
+            deletedBlockElementIds,
+            hasUnfetchedSeating: this.canvas.hasUnhydratedBlocks(),
+          },
+          { onProgress },
+        );
+        this.canvas.clearPendingBlockDeletions(deletedBlockElementIds);
+        this.drafts.clear(this.drafts.storageKey(id));
+        this.queryClient.invalidateQueries({ queryKey: venueTemplateKeys.list() });
+        this.queryClient.invalidateQueries({ queryKey: venueTemplateKeys.detail(id) });
+        await this.finishSaveProgress(
+          `Saved seating changes on ${commit.savedCount} block${commit.savedCount === 1 ? '' : 's'} (${commit.totalSeats} seats).`,
+        );
+        this.canvas.blockWorkspaceConfigSaved.set(true);
+      } else {
+        const newId = await this.templates.createTemplate(
+          {
+            name,
+            description: this.description(),
+            layoutConfig,
+          },
+          { onProgress },
+        );
+        if (this.newSessionId) {
+          this.drafts.clear(this.drafts.storageKey(null, this.newSessionId));
+        }
+        this.drafts.clearLegacyNewDraft();
+        this.templateId.set(newId);
+        this.newSessionId = null;
+        this.queryClient.invalidateQueries({ queryKey: venueTemplateKeys.list() });
+        this.queryClient.invalidateQueries({ queryKey: venueTemplateKeys.detail(newId) });
+        await this.finishSaveProgress(
+          `Saved seating changes on ${commit.savedCount} block${commit.savedCount === 1 ? '' : 's'} to your template library.`,
+        );
+        this.canvas.blockWorkspaceConfigSaved.set(true);
+        await this.router.navigate(['/venue-layouts', newId, 'edit'], { replaceUrl: true });
+      }
+      this.persistDraft();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Save failed.';
+      this.failSaveProgress(msg);
+      this.persistDraft();
+    }
+  }
+
   protected async saveTemplate(): Promise<void> {
     const name = this.templateName().trim();
     if (!name) {
@@ -1252,13 +1344,13 @@ export class LayoutDesignerPage implements OnInit, OnDestroy {
       blockWorkspaceId: draft.blockWorkspaceId ?? null,
     });
     // A draft of a saved venue carries the same geometry shell, so blocks it
-    // never fetched still have to be pulled on demand.
-    this.canvas.lazySeatingMode.set(Boolean(draft.templateId));
-    if (draft.blockWorkspaceId) {
-      this.canvas.completeSeatHydration();
-    } else {
-      this.canvas.beginSeatHydration(this.canvas.renderableSeatCount());
-    }
+    // never fetched still have to be pulled on demand. Large in-memory seat
+    // sets (e.g. after Auto Fill) also stay click-to-reveal in the overview.
+    const largeSeatSet = this.canvas.renderableSeatCount() > 1200;
+    this.canvas.lazySeatingMode.set(Boolean(draft.templateId) || largeSeatSet);
+    // Never progressive-paint every chair in overview — that left seats on all
+    // blocks and showed "Loading seats…" for 60k+ layouts.
+    this.canvas.completeSeatHydration();
     this.referenceFileName.set(draft.layoutConfig.referenceImage?.name ?? null);
     this.saveNotice.set(null);
     this.notice.set(null);
@@ -1335,7 +1427,8 @@ export class LayoutDesignerPage implements OnInit, OnDestroy {
 
       this.canvas.loadLayoutConfig(template.layout_config);
       this.canvas.lazySeatingMode.set(true);
-      this.canvas.beginSeatHydration(this.canvas.renderableSeatCount());
+      // Blocks only until the user focuses a block (seating fetched on demand).
+      this.canvas.completeSeatHydration();
       this.referenceFileName.set(template.layout_config.referenceImage?.name ?? null);
       this.activePanel.set('chooser');
       this.notice.set(null);

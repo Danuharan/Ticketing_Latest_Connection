@@ -128,7 +128,7 @@
     @if (inBlockWorkspace()) {
       <div class="designer-workspace__grid designer-workspace__grid--block">
         <div class="designer-sidebar-col">
-          <app-block-workspace-sidebar />
+          <app-block-workspace-sidebar (saveSeatedBlockChanges)="saveSeatedBlockChanges()" />
         </div>
 
         <div class="designer-canvas-col designer-canvas-col--block">
@@ -137,6 +137,26 @@
             class="designer-box designer-canvas-box canvas-viewport canvas-viewport--block"
             [class.canvas-viewport--panning]="canvas.viewportPanning()"
           >
+            @if (showAutoFillTopProgress()) {
+              @let pct = autoFillTopProgressPct();
+              <div
+                class="autofill-top-progress autofill-top-progress--overlay"
+                role="progressbar"
+                [attr.aria-valuenow]="pct"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                [attr.aria-label]="saveProgressOpen() ? saveProgressMessage() : 'Auto Fill progress'"
+              >
+                <div class="autofill-top-progress__track">
+                  <div
+                    class="autofill-top-progress__fill"
+                    [class.autofill-top-progress__fill--done]="saveProgressSuccess() || pct >= 100"
+                    [style.transform]="'scaleX(' + pct / 100 + ')'"
+                  ></div>
+                </div>
+                <span class="autofill-top-progress__pct">{{ pct }}%</span>
+              </div>
+            }
             <app-canvas-stage />
             @if (showCanvasLoadingOverlay()) {
               <div class="designer-canvas-loading" role="status" aria-live="polite">

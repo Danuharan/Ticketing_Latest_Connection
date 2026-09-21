@@ -814,6 +814,19 @@
               <button
                 type="button"
                 class="insp__btn insp__btn--primary insp__btn--block"
+                [disabled]="workspaceBlockSeatCount() <= 0"
+                [title]="
+                  workspaceBlockSeatCount() > 0
+                    ? 'Save aisle, gap, and seat edits on blocks that already have seats'
+                    : 'Create seats on this block first'
+                "
+                (click)="saveAlreadySeatedBlockChanges()"
+              >
+                Save seating changes
+              </button>
+              <button
+                type="button"
+                class="insp__btn insp__btn--primary insp__btn--block"
                 (click)="startAutoFillLayout()"
               >
                 Auto Fill

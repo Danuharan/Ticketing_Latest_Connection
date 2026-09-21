@@ -6,6 +6,7 @@ import {
   HostListener,
   inject,
   OnDestroy,
+  output,
   signal,
   untracked,
 } from '@angular/core';
@@ -62,6 +63,9 @@ export class BlockWorkspaceSidebarComponent implements OnDestroy {
   protected readonly canvas = inject(LayoutCanvasService);
   protected readonly templates = inject(BlockConfigTemplateService);
   private readonly toast = inject(ToastService);
+
+  /** Parent persists already-seated block edits to the venue template. */
+  readonly saveSeatedBlockChanges = output<void>();
 
   private static readonly SIDE_LENGTH_STEP_M = 0.1;
   private static readonly AUTO_FILL_CHAIR_STEP_M = 0.05;
@@ -1204,6 +1208,15 @@ export class BlockWorkspaceSidebarComponent implements OnDestroy {
     this.toast.success(
       `Created ${result.seatCount} seat${result.seatCount === 1 ? '' : 's'} on this block. Click Auto Fill, select/unselect blocks on the layout, then Auto Fill again to seat them.`,
     );
+  }
+
+  /** Persist aisle / gap / seat edits on blocks that already have seats. */
+  protected saveAlreadySeatedBlockChanges(): void {
+    if (this.workspaceBlockSeatCount() <= 0) {
+      this.toast.error('Create seats on this block first, then save your changes.');
+      return;
+    }
+    this.saveSeatedBlockChanges.emit();
   }
 
   protected startAutoFillLayout(): void {

@@ -806,18 +806,26 @@ export class LayoutCanvasService {
   }
 
   /**
-   * Blocks allowed to paint chairs, or null for every block. Lazily-loaded
+   * Blocks allowed to paint chairs, or null for every block. Large / lazily-loaded
    * layouts only paint the block in focus, so clicking through a stadium does
    * not accumulate tens of thousands of seat nodes.
+   *
+   * Multi-select (Auto Fill target picking) must NOT paint every selected block —
+   * only the primary focus (`selectedId`) or the open block workspace.
+   * While Auto Fill is animating, paint freely so the sweep remains visible.
    */
   readonly seatRenderElementIds = computed<ReadonlySet<string> | null>(() => {
+    if (this.autoFillAnimating()) {
+      return null;
+    }
     if (!this.lazySeatingMode()) {
       return null;
     }
-    const ids = new Set<string>(this.selectedIds());
+    const ids = new Set<string>();
     const workspace = this.blockWorkspaceId();
     if (workspace) {
       ids.add(workspace);
+      return ids;
     }
     const single = this.selectedId();
     if (single) {
@@ -825,6 +833,13 @@ export class LayoutCanvasService {
     }
     return ids;
   });
+
+  /** Overview stays block-outlines-only when many chairs are already in memory. */
+  private enableLazyOverviewSeatingIfNeeded(): void {
+    if (this.renderableSeatCount() > 1200) {
+      this.lazySeatingMode.set(true);
+    }
+  }
 
   /** Element ids to delete from venue_block_configurations on the next save. */
   pendingBlockDeletions(): string[] {
@@ -5471,6 +5486,10 @@ export class LayoutCanvasService {
       this.autoFillError.set(null);
     }
 
+    // Keep overview as block outlines; chairs paint only for the focused block.
+    this.enableLazyOverviewSeatingIfNeeded();
+    this.completeSeatHydration();
+
     return batch;
   }
 
@@ -6401,6 +6420,10 @@ export class LayoutCanvasService {
       this.autoFillError.set(null);
     }
 
+    // After the sweep, hide stadium-wide chairs until a block is focused.
+    this.enableLazyOverviewSeatingIfNeeded();
+    this.completeSeatHydration();
+
     return batch;
   }
 
@@ -6445,6 +6468,61 @@ export class LayoutCanvasService {
     this.autoFillError.set(null);
     this.selectElement(null);
     return { savedCount, totalSeats };
+  }
+
+  /**
+   * Blocks that already have seats — used before persisting aisle/gap/seat edits
+   * from the block workspace without entering Auto Fill layout mode.
+   */
+  summarizeAlreadySeatedBlocks(): { savedCount: number; totalSeats: number } | null {
+    const canvas = this.canvas();
+    let savedCount = 0;
+    let totalSeats = 0;
+    for (const el of this.elements()) {
+      if (el.type !== 'centerpiece' || !isAutoFillEligibleBlock(el)) {
+        continue;
+      }
+      const rect = rectFromPositionSize(el.position, el.size, canvas);
+      const seatCount = getCustomShapeVisibleSeatCount(el, rect);
+      if (seatCount <= 0) {
+        continue;
+      }
+      savedCount += 1;
+      totalSeats += seatCount;
+    }
+    if (savedCount === 0) {
+      return null;
+    }
+    return { savedCount, totalSeats };
+  }
+
+  /** Lock already-seated blocks so edits stay committed after template persist. */
+  lockAlreadySeatedBlocks(): void {
+    const canvas = this.canvas();
+    let changed = false;
+    for (const el of this.elements()) {
+      if (el.type !== 'centerpiece' || !isAutoFillEligibleBlock(el)) {
+        continue;
+      }
+      const rect = rectFromPositionSize(el.position, el.size, canvas);
+      if (getCustomShapeVisibleSeatCount(el, rect) <= 0) {
+        continue;
+      }
+      if (el.interactiveSeatingLocked && !el.dragSeatsMode && !el.dragFillSeatsMode) {
+        continue;
+      }
+      if (!changed) {
+        this.pushHistory();
+        changed = true;
+      }
+      this.applyPatch(el.id, {
+        interactiveSeatingLocked: true,
+        dragSeatsMode: undefined,
+        dragSeatsFirstRowSeatCount: undefined,
+        dragFillSeatsMode: undefined,
+      });
+    }
+    this.autoFillLayoutRevertSnapshots.clear();
   }
 
   /** Re-place arrange-by-row seats after chair size or gap changes. */
@@ -7069,6 +7147,8 @@ export class LayoutCanvasService {
         ? planned.entry
         : this.applySeatingImportPlan(row, planned.el, planned.plan, filled);
     });
+    this.enableLazyOverviewSeatingIfNeeded();
+    this.completeSeatHydration();
     return [...report, ...unmatched];
   }
 
@@ -7157,6 +7237,8 @@ export class LayoutCanvasService {
       }
     }
     this.selectElement(null);
+    this.enableLazyOverviewSeatingIfNeeded();
+    this.completeSeatHydration();
     return [...report, ...unmatched];
   }
 
@@ -8274,14 +8356,14 @@ export class LayoutCanvasService {
     this.revealOverviewSeatsGradually();
   }
 
-  /** After leaving a block, fill chairs in batches so the overview does not freeze. */
+  /**
+   * After leaving a block, keep the overview light: block shapes only until the
+   * user focuses a block. Progressive "Loading seats…" across every block was
+   * freezing the canvas and sometimes left chairs painted on the whole stadium.
+   */
   private revealOverviewSeatsGradually(): void {
-    const total = this.renderableSeatCount();
-    if (total <= 1200) {
-      this.completeSeatHydration();
-      return;
-    }
-    this.beginSeatHydration(total);
+    this.enableLazyOverviewSeatingIfNeeded();
+    this.completeSeatHydration();
   }
 
   /** Frame the full layout in the main workspace (overview, zoom capped at 100%). */
